@@ -1,0 +1,717 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Manrope:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"on-background": "#1a1c1b", "tertiary-fixed-dim": "#aacae5", "on-primary": "#ffffff", "on-surface": "#1a1c1b", "inverse-surface": "#2f312f", "on-primary-fixed-variant": "#474746", "secondary-container": "#cde6d0", "secondary-fixed": "#d0e9d3", "tertiary-container": "#001e2f", "surface-container-highest": "#e2e3e0", "surface-container-lowest": "#ffffff", "on-error-container": "#93000a", error: "#ba1a1a", "secondary-fixed-dim": "#b4cdb8", "outline-variant": "#c4c7c7", "error-container": "#ffdad6", "surface-container": "#eeeeeb", "surface-tint": "#5f5e5e", primary: "#000000", tertiary: "#000000", background: "#f9f9f6", "on-error": "#ffffff", "surface-variant": "#e2e3e0", "on-tertiary-container": "#6887a0", "surface-dim": "#dadad7", "on-secondary-container": "#526856", "primary-fixed-dim": "#c8c6c5", secondary: "#4d6452", "on-secondary-fixed": "#0b2012", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#2a4a60", "on-secondary-fixed-variant": "#364c3c", "on-primary-fixed": "#1c1b1b", "on-tertiary": "#ffffff", "surface-container-high": "#e8e8e5", "tertiary-fixed": "#c9e6ff", "on-tertiary-fixed": "#001e2f", "inverse-primary": "#c8c6c5", "primary-container": "#1c1b1b", "inverse-on-surface": "#f1f1ee", "primary-fixed": "#e5e2e1", "on-surface-variant": "#444748", outline: "#747878", "surface-bright": "#f9f9f6", "on-primary-container": "#858383", surface: "#f9f9f6", "surface-container-low": "#f4f4f1"}, borderRadius: {DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px"}, spacing: {margin: "1.25rem", "space-sm": "0.5rem", gutter: "1rem", "margin-desktop": "2rem", "space-md": "1rem", "space-xl": "2.25rem", "margin-mobile": "1rem", "space-xs": "0.25rem", "gutter-sm": "0.75rem", "space-lg": "1.5rem"}, fontFamily: {"headline-sm": ["Manrope"], "headline-lg-mobile": ["Space Grotesk"], "label-numeric": ["Geist"], "headline-lg": ["Space Grotesk"], "display-lg-mobile": ["Space Grotesk"], "display-lg": ["Space Grotesk"], "body-sm": ["Manrope"], "headline-md": ["Manrope"], "body-md": ["Manrope"], "body-lg": ["Manrope"], "label-tag": ["Geist"], "label-code": ["Geist"], headline: ["Space Grotesk"], display: ["Space Grotesk"], body: ["Manrope"], label: ["Geist"]}, fontSize: {"headline-sm": ["1.125rem", {lineHeight: "1.5rem", letterSpacing: "-0.01em", fontWeight: "600"}], "headline-lg-mobile": ["1.5rem", {lineHeight: "1.875rem", letterSpacing: "-0.02em", fontWeight: "500"}], "label-numeric": ["1.75rem", {lineHeight: "2rem", letterSpacing: "-0.03em", fontWeight: "600"}], "headline-lg": ["2rem", {lineHeight: "2.375rem", letterSpacing: "-0.02em", fontWeight: "500"}], "display-lg-mobile": ["2.25rem", {lineHeight: "2.5rem", letterSpacing: "-0.03em", fontWeight: "600"}], "display-lg": ["3rem", {lineHeight: "3.25rem", letterSpacing: "-0.04em", fontWeight: "600"}], "body-sm": ["0.75rem", {lineHeight: "1.125rem", letterSpacing: "0.01em", fontWeight: "400"}], "headline-md": ["1.25rem", {lineHeight: "1.625rem", letterSpacing: "-0.015em", fontWeight: "600"}], "body-md": ["0.875rem", {lineHeight: "1.375rem", letterSpacing: "0em", fontWeight: "400"}], "body-lg": ["1rem", {lineHeight: "1.5rem", letterSpacing: "-0.005em", fontWeight: "400"}], "label-tag": ["0.6875rem", {lineHeight: "0.875rem", letterSpacing: "0.06em", fontWeight: "600"}], "label-code": ["0.8125rem", {lineHeight: "1rem", letterSpacing: "0.04em", fontWeight: "500"}]}}}}</script><style>@layer base { html, body { width: 100vw; margin: 0; padding: 0; background-color: #121412; } body { overscroll-behavior: none; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen selection:bg-secondary-container"><header class="fixed top-0 inset-x-0 z-50 bg-surface/75 backdrop-blur-xl shadow-[0_1px_16px_rgba(0,0,0,0.4)] pt-safe"><div class="h-16 px-gutter flex items-center justify-between max-w-lg mx-auto w-full"><div class="flex items-center gap-space-sm"><img alt="MONDAY App Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/ALJJyrD8Dequ99zQG0CvgwKkxzVbAuRPsaoo2ifCOOTWmJ_fp-PeXkoYlGPd4GtqxSr4RwFm88w3iOnPIfpp0efeTz-U2wj9YrHb6POx4ZtUFucv4XWJQsbQHEyN_LRi_1WzYJbUsTfwaDvIAUQVDKxjr_tLUoWzamdiBWU9yhnbyn_IA1BmgVNahSewCSCyVH65cQdYC9ppTPAe20U-fzVgGFSxt9TRqZcGVNnXmX4APrAo"><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface truncate max-w-[170px]"><span style="letter-spacing: -0.18px;">Tasks</span><span style="letter-spacing: -0.18px;">&amp;</span>Deadlines&nbsp;</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Add New Task" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-high transition-colors focus:outline-none text-on-surface active:scale-95" id="header-add-task-btn"><span class="material-symbols-outlined text-[20px]">add</span></button><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors focus:outline-none text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">notifications</span></button><a aria-label="Settings &amp; Preferences" class="w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors focus:outline-none cursor-pointer active:scale-95" data-screen="SCREEN_2" href="#"><img alt="Profile - Settings &amp; Preferences" class="w-8 h-8 rounded-full object-cover ring-1 ring-surface-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMTK_6gIFhKal5e-qldG5WUcmtv0ARGls7IbNpPqDxTaAe6IRZSTb8SUm1fmCj9Bl4zdL7xkP-QDKr6u7onLneCJmTuqjKjYSYdWKB4VceCxwsSck_YtE8FSbiyRRL0rEyoAK1-uC64oXEdT3F7KApq1DFP3dGSTooPnK8JktO2NyJTfK7fwTOUuFDfcZhF5eGmOsar4RYRgVozfbwKMM81Gp10BXHts2J219itn7L"></a></div></div></header><main class="flex-1 flex flex-col relative w-full max-w-lg mx-auto px-gutter pb-32 bg-surface pt-2"><div class="flex flex-col w-full gap-space-md"><!-- Header & Context Panel -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex flex-col w-full gap-2">
+<button class="w-full bg-[#171717] text-white py-3 px-4 rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-sm mb-4 active:scale-95 transition-all duration-150 cursor-pointer" id="add-deadline-btn"><span class="material-symbols-outlined text-[18px]">add</span><span>New Task</span></button>
+</div>
+</div>
+<!-- Filter Pills Bar -->
+<!-- Active Deliverables Section -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-code text-[10px]" id="pending-counter-badge">5 Pending</span>
+</div>
+</div>
+<div class="flex flex-col gap-space-sm" id="tasks-container">
+<!-- Card 1: CS204 -->
+<div class="deliverable-card bg-surface-container/75 backdrop-blur-xl rounded-xl p-space-md shadow-[0_8px_32px_-4px_rgba(0,0,0,0.35)] flex flex-col justify-between transition-all duration-300 gap-3">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">CS204</span>
+<span class="px-2 py-0.5 rounded-full bg-[#D97B78]/15 text-[#ffb4ab] font-label-tag text-label-tag">TP / Practical</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Data Structures</span>
+</div>
+<span class="shrink-0 px-2.5 py-1 rounded-full bg-[#D97B78]/20 text-[#ffb4ab] font-label-tag text-label-tag font-semibold flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-[#ffb4ab] animate-ping"></span>
+          7h left
+        </span>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface leading-snug">TP 3 — Balanced Binary Trees Implementation</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">schedule</span>
+<span>Due Today, 11:59 PM • <span class="text-on-surface">15% Course Grade</span></span>
+</p>
+</div>
+<div class="bg-surface-container-low/90 rounded-lg p-2.5 flex items-center justify-between text-body-sm">
+<div class="flex items-center gap-2 text-on-surface-variant min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">cloud_upload</span>
+<span class="font-label-code text-label-code truncate">Submission via Moodle Portal</span>
+</div>
+<span class="font-label-code text-[11px] text-secondary shrink-0">Auto-sync Ready</span>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-tertiary-fixed-dim font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-tertiary-fixed-dim shrink-0">notifications_active</span>
+<span class="truncate">Alert 6:00 PM (6h prior)</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px] status-check">check_circle</span>
+<span class="btn-label">Mark Complete</span>
+</button>
+</div>
+</div>
+<!-- Card 2: MATH401 -->
+<div class="deliverable-card bg-surface-container/75 backdrop-blur-xl rounded-xl p-space-md shadow-[0_8px_32px_-4px_rgba(0,0,0,0.35)] flex flex-col justify-between transition-all duration-300 gap-3">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">MATH401</span>
+<span class="px-2 py-0.5 rounded-full bg-[#E89A68]/15 text-[#e89a68] font-label-tag text-label-tag">Assignment</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Mathematics IV</span>
+</div>
+<span class="shrink-0 px-2.5 py-1 rounded-full bg-[#E89A68]/20 text-[#e89a68] font-label-tag text-label-tag font-semibold">
+          Due in 24h
+        </span>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface leading-snug">Problem Set 5: Fourier Transforms</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">schedule</span>
+<span>Tomorrow, 5:00 PM • <span class="text-on-surface">10% Homework Weight</span></span>
+</p>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">notifications</span>
+<span class="truncate">Reminder Tomorrow 9:00 AM</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px] status-check">check_circle</span>
+<span class="btn-label">Mark Complete</span>
+</button>
+</div>
+</div>
+<!-- Card 3: ECE302 -->
+<div class="deliverable-card bg-surface-container/60 backdrop-blur-md rounded-xl p-space-md flex flex-col justify-between transition-all gap-3">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">ECE302</span>
+<span class="px-2 py-0.5 rounded-full bg-[#91A995]/15 text-[#91A995] font-label-tag text-label-tag">TP / Lab Report</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Digital Electronics</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-snug">Verilog Lab Report — Finite State Machines</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">schedule</span>
+<span>Thursday, Nov 13 • 2:00 PM</span>
+</p>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">notifications</span>
+<span class="truncate">Notify 1 day prior</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px] status-check">check_circle</span>
+<span class="btn-label">Mark Complete</span>
+</button>
+</div>
+</div>
+<!-- Card 4: CS301 -->
+<div class="deliverable-card bg-surface-container/60 backdrop-blur-md rounded-xl p-space-md flex flex-col justify-between transition-all gap-3">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">CS301</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-tag text-label-tag font-semibold">Project</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Computer Networks</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded-full shrink-0">
+<span class="material-symbols-outlined text-[13px]">group</span>
+<span class="font-label-code text-[11px] text-on-surface">Alex K.</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-snug">Midterm Term Project — Socket Programming Chat Server</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">schedule</span>
+<span>Sunday, Nov 16 • 11:59 PM</span>
+</p>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">notifications</span>
+<span class="truncate">Notify 2 days prior</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px] status-check">check_circle</span>
+<span class="btn-label">Mark Complete</span>
+</button>
+</div>
+</div>
+<!-- Card 5: PHY201 -->
+<div class="deliverable-card bg-surface-container/60 backdrop-blur-md rounded-xl p-space-md flex flex-col justify-between transition-all gap-3">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">PHY201</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-secondary font-label-tag text-label-tag">Exam / Quiz</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Applied Physics</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-code text-[11px] shrink-0">
+          Lecture Hall 4B
+        </span>
+</div>
+<div class="flex flex-col gap-1">
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-snug">Quiz 2 — Wave Mechanics</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">schedule</span>
+<span>Next Tuesday, Nov 18 • 10:00 AM</span>
+</p>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">notifications</span>
+<span class="truncate">Notify 3 days prior</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px] status-check">check_circle</span>
+<span class="btn-label">Mark Complete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Completed Section -->
+<div class="flex flex-col gap-space-sm pt-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-tag text-label-tag text-on-surface-variant font-semibold uppercase tracking-widest">Completed Tasks</span>
+<span class="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-code text-[10px]">2 Done</span>
+</div>
+<span class="font-label-code text-[11px] text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+      All synced
+    </span>
+</div>
+<!-- Completed Card 1: Problem Set 4 -->
+<div class="deliverable-card bg-surface-container-low/75 backdrop-blur-md rounded-xl p-space-md flex flex-col justify-between transition-all gap-3 border border-surface-variant/40">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0 opacity-70">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">MATH401</span>
+<span class="px-2 py-0.5 rounded-full bg-[#E89A68]/15 text-[#e89a68] font-label-tag text-label-tag">Assignment</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Mathematics IV</span>
+</div>
+<span class="shrink-0 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-tag text-label-tag font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check</span>
+          Completed
+        </span>
+</div>
+<div class="flex flex-col gap-1 opacity-70">
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-snug line-through">Problem Set 4: Linear Algebra &amp; Matrices</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">done_all</span>
+<span>Submitted Yesterday, 4:20 PM • Score: 98/100</span>
+</p>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-secondary font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">task_alt</span>
+<span class="truncate">Grade recorded in portal</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant transition-all">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span class="btn-label">Completed</span>
+</button>
+</div>
+</div>
+<!-- Completed Card 2: Lab 1 Git -->
+<div class="deliverable-card bg-surface-container-low/75 backdrop-blur-md rounded-xl p-space-md flex flex-col justify-between transition-all gap-3 border border-surface-variant/40">
+<div class="flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0 opacity-70">
+<span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">ECE302</span>
+<span class="px-2 py-0.5 rounded-full bg-[#91A995]/15 text-[#91A995] font-label-tag text-label-tag">Lab 1</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm truncate">Digital Electronics</span>
+</div>
+<span class="shrink-0 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-tag text-label-tag font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check</span>
+          Completed
+        </span>
+</div>
+<div class="flex flex-col gap-1 opacity-70">
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-snug line-through">Lab 1: Git &amp; Build Tools Verification</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">done_all</span>
+<span>Completed Nov 6 • Verified by TA</span>
+</p>
+</div>
+</div>
+<div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 text-secondary font-label-code text-label-code min-w-0 truncate">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">task_alt</span>
+<span class="truncate">Signed off by Lab Instructor</span>
+</div>
+<button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant transition-all">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span class="btn-label">Completed</span>
+</button>
+</div>
+</div>
+</div></div>
+</main>
+<!-- Interactive New Task / Add Deliverable Modal Drawer Sheet -->
+<div class="fixed inset-0 z-[100] items-end justify-center flex" id="add-task-modal">
+<!-- Backdrop -->
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 cursor-pointer opacity-100" id="modal-backdrop"></div>
+<!-- Sheet Container -->
+<div class="relative w-full max-w-lg bg-surface rounded-t-[28px] max-h-[92vh] flex flex-col shadow-2xl transition-transform duration-300 z-10 overflow-hidden border-t border-surface-variant/40 pb-safe translate-y-0" id="modal-sheet">
+<!-- Top Pull Handle & Header -->
+<div class="pt-3 pb-2 px-gutter flex flex-col shrink-0 border-b border-surface-variant/30 bg-surface/90 backdrop-blur-md sticky top-0 z-10">
+<div class="w-10 h-1.5 bg-surface-container-highest rounded-full mx-auto mb-2.5"></div>
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-tag text-label-tag text-secondary uppercase tracking-widest font-semibold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            Academic Horizon
+          </span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface tracking-tight mt-0.5">New Deliverable</h2>
+</div>
+<button class="px-space-md py-space-xs rounded-full bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1 active:scale-95" id="modal-discard-btn">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span>Discard</span>
+</button>
+</div>
+</div>
+<!-- Scrollable Content matching Screen 7 form -->
+<div class="flex-1 overflow-y-auto px-gutter py-space-md space-y-space-md no-scrollbar">
+<!-- Primary Task Title Container -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-all focus-within:shadow-md">
+<label class="block font-label-tag text-label-tag text-on-surface-variant uppercase tracking-wider mb-space-xs" for="modal-task-title-input">Deliverable Name</label>
+<div class="relative flex items-center">
+<input class="w-full bg-transparent font-headline-sm text-headline-sm text-on-surface placeholder:text-outline-variant focus:outline-none pr-8" id="modal-task-title-input" placeholder="e.g., TP 4 — Graph Traversals &amp; Heuristics" type="text" value="PS 6: Fourier Matrix Transforms">
+<button class="text-outline hover:text-on-surface transition-colors flex items-center justify-center p-1" title="Voice Dictation" type="button">
+<span class="material-symbols-outlined text-[20px]">mic</span>
+</button>
+</div>
+</div>
+<!-- Course Selector Chips (Horizontal Scrollable) -->
+<div>
+<div class="flex items-center justify-between mb-space-xs px-1">
+<span class="font-label-tag text-label-tag text-on-surface-variant uppercase tracking-wider">Enrolled Course</span>
+<span class="font-label-code text-label-code text-secondary font-medium">5 Active Units</span>
+</div>
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar py-1 -mx-gutter px-gutter" id="modal-course-list">
+<button class="modal-course-pill shrink-0 flex items-center gap-2 px-space-md py-space-sm rounded-full bg-primary text-on-primary transition-all shadow-sm" data-course="MATH401" data-course-sub="Mathematics IV" type="button">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+<span class="font-label-code text-label-code font-semibold">MATH401</span>
+<span class="font-body-sm text-body-sm opacity-80">Adv. Math</span>
+</button>
+<button class="modal-course-pill shrink-0 flex items-center gap-2 px-space-md py-space-sm rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface transition-all" data-course="CS204" data-course-sub="Data Structures" type="button">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="font-label-code text-label-code font-semibold">CS204</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Data Struct.</span>
+</button>
+<button class="modal-course-pill shrink-0 flex items-center gap-2 px-space-md py-space-sm rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface transition-all" data-course="ECE302" data-course-sub="Digital Electronics" type="button">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="font-label-code text-label-code font-semibold">ECE302</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Dig. Systems</span>
+</button>
+<button class="modal-course-pill shrink-0 flex items-center gap-2 px-space-md py-space-sm rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface transition-all" data-course="CS301" data-course-sub="Computer Networks" type="button">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="font-label-code text-label-code font-semibold">CS301</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Networks</span>
+</button>
+<button class="modal-course-pill shrink-0 flex items-center gap-2 px-space-md py-space-sm rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface transition-all" data-course="PHY201" data-course-sub="Applied Physics" type="button">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="font-label-code text-label-code font-semibold">PHY201</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Physics</span>
+</button>
+<button class="shrink-0 flex items-center gap-1.5 px-space-md py-space-sm rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface-variant transition-all font-body-sm text-body-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Custom</span>
+</button>
+</div>
+</div>
+<!-- Deliverable Category Tabs -->
+<div>
+<span class="block font-label-tag text-label-tag text-on-surface-variant uppercase tracking-wider mb-space-xs px-1">Task Category</span>
+<div class="grid grid-cols-3 gap-2" id="modal-category-group">
+<button class="modal-category-toggle flex flex-col items-center justify-center p-space-sm rounded-xl shadow-sm transition-all text-center bg-surface-container-lowest text-on-surface" data-category="Assignment" type="button">
+<span class="material-symbols-outlined text-[20px] mb-1">assignment</span>
+<span class="font-label-code text-label-code font-semibold leading-tight">Assignment</span>
+<span class="font-label-tag text-label-tag opacity-75 mt-0.5">Problem Set</span>
+</button>
+<button class="modal-category-toggle flex flex-col items-center justify-center p-space-sm rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface shadow-sm transition-all text-center" data-category="TP / Lab" type="button">
+<span class="material-symbols-outlined text-[20px] mb-1 text-on-surface-variant">science</span>
+<span class="font-label-code text-label-code font-medium leading-tight">TP / Lab</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant mt-0.5">Report &amp; Code</span>
+</button>
+<button class="modal-category-toggle flex flex-col items-center justify-center p-space-sm rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface shadow-sm transition-all text-center" data-category="Project" type="button">
+<span class="material-symbols-outlined text-[20px] mb-1 text-on-surface-variant">account_tree</span>
+<span class="font-label-code text-label-code font-medium leading-tight">Project</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant mt-0.5">Milestone</span>
+</button>
+<button class="modal-category-toggle flex flex-col items-center justify-center p-space-sm rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface shadow-sm transition-all text-center" data-category="Exam / Quiz" type="button">
+<span class="material-symbols-outlined text-[20px] mb-1 text-on-surface-variant">timer</span>
+<span class="font-label-code text-label-code font-medium leading-tight">Exam / Quiz</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant mt-0.5">Assessment</span>
+</button>
+<button class="modal-category-toggle col-span-2 flex items-center justify-center gap-2 p-space-sm rounded-xl hover:bg-surface-container shadow-sm transition-all bg-secondary-container text-on-secondary-container" data-category="Reading &amp; Annotations" type="button">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">auto_stories</span>
+<div class="text-left">
+<span class="font-label-code text-label-code font-medium block leading-tight">Reading &amp; Annotations</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant">Lecture prep notes</span>
+</div>
+</button>
+<button class="modal-category-toggle flex flex-col items-center justify-center p-space-sm rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface shadow-sm transition-all text-center border border-dashed border-outline-variant" data-category="Custom" type="button"><span class="material-symbols-outlined text-[20px] mb-1 text-secondary">add_circle</span><span class="font-label-code text-label-code font-medium leading-tight">Custom</span><span class="font-label-tag text-label-tag text-on-surface-variant mt-0.5">Add category</span></button></div>
+</div>
+<!-- Due Date, Time & Grade Weight Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<span class="font-label-tag text-label-tag text-on-surface-variant uppercase tracking-wider">Timeline &amp; Assessment Weight</span>
+<div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-tag text-label-tag font-semibold">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+            HIGH PRIORITY
+          </div>
+</div>
+<!-- Date & Time Row -->
+<div class="grid grid-cols-2 gap-space-sm">
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col justify-between">
+<span class="font-label-tag text-label-tag text-on-surface-variant uppercase">Deadline Day</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-secondary text-[20px]">calendar_today</span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold leading-tight" id="modal-date-val">Nov 14</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" id="modal-date-sub">Tomorrow, Thu</span>
+</div>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col justify-between">
+<span class="font-label-tag text-label-tag text-on-surface-variant uppercase">Cut-Off Clock</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-secondary text-[20px]">schedule</span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold leading-tight" id="modal-time-val">11:59 PM</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Midnight grace</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Time Presets Micro-Pills -->
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-label-tag text-label-tag text-on-surface-variant mr-1">Quick:</span>
+<button class="modal-preset-btn px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-code text-label-code hover:bg-surface-container-high transition-colors" data-date="Today" data-datesub="Tonight" data-time="11:59 PM" type="button">Tonight 11:59 PM</button>
+<button class="modal-preset-btn px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-code text-label-code hover:bg-surface-container-high transition-colors" data-date="Tomorrow" data-datesub="24h Window" data-time="5:00 PM" type="button">+24h Window</button>
+<button class="modal-preset-btn px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-code text-label-code hover:bg-surface-container-high transition-colors" data-date="Nov 16" data-datesub="Sunday, End of Week" data-time="11:59 PM" type="button">End of Week</button>
+</div>
+<!-- Grade Impact Slider & Indicator -->
+
+</div>
+<!-- Smart Reminder Horizon Configuration -->
+
+<!-- Submission Target & Platform Integration -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm mb-4 flex flex-col gap-space-sm">
+<span class="font-label-tag text-label-tag text-on-surface-variant uppercase tracking-wider px-1">Submission Target Platform</span>
+<div class="grid grid-cols-2 gap-2" id="modal-platform-group">
+<button class="modal-platform-btn p-space-sm rounded-lg bg-surface-container-high text-on-surface flex items-center gap-2 transition-all" data-platform="Moodle Portal" type="button">
+<span class="material-symbols-outlined text-[20px] text-secondary">sync</span>
+<div class="text-left">
+<span class="font-label-code text-label-code font-semibold block leading-none">Moodle Portal</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant">Auto-check status</span>
+</div>
+</button>
+<button class="modal-platform-btn p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface flex items-center gap-2 transition-all" data-platform="Canvas LMS" type="button">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">school</span>
+<div class="text-left">
+<span class="font-label-code text-label-code font-medium block leading-none">Canvas LMS</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant">API Linked</span>
+</div>
+</button>
+<button class="modal-platform-btn p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface flex items-center gap-2 transition-all" data-platform="Direct PDF Upload" type="button">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">upload_file</span>
+<div class="text-left">
+<span class="font-label-code text-label-code font-medium block leading-none">Direct PDF Upload</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant">In-app scanner</span>
+</div>
+</button>
+<button class="modal-platform-btn p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface flex items-center gap-2 transition-all" data-platform="Physical In-Hand" type="button">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">inventory_2</span>
+<div class="text-left">
+<span class="font-label-code text-label-code font-medium block leading-none">Physical In-Hand</span>
+<span class="font-label-tag text-label-tag text-on-surface-variant">Hallway handover</span>
+</div>
+</button>
+</div>
+<div class="mt-space-xs">
+
+
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Creation Action Bar -->
+<div class="p-gutter bg-surface/95 backdrop-blur-xl border-t border-surface-variant/30 flex items-center gap-space-sm shrink-0">
+<button class="w-12 h-12 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface flex items-center justify-center shrink-0" title="Templates" type="button">
+<span class="material-symbols-outlined text-[22px]">content_paste</span>
+</button>
+<button class="flex-1 h-12 rounded-full bg-primary hover:bg-surface-container-highest transition-all text-on-primary active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg" id="modal-confirm-schedule-btn" type="button">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+<span class="font-label-code text-label-code font-semibold tracking-wide uppercase">Schedule &amp; Arm Reminders</span>
+</button>
+</div>
+</div>
+</div>
+<div class="fixed bottom-0 inset-x-0 z-50 pb-safe pointer-events-none flex justify-center px-margin-mobile mb-4"><nav class="pointer-events-auto w-full max-w-[330px] bg-white/95 backdrop-blur-md rounded-full px-2 py-1.5 shadow-lg shadow-black/5 flex items-center justify-between ring-1 ring-surface-variant" data-active-classes="bg-neutral-900 text-white shadow-sm"><a class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-neutral-500 hover:text-on-surface transition-colors font-medium text-xs" data-path="home-dashboard" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span>Home</span></a><a class="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-neutral-900 text-white font-medium text-xs tracking-tight shadow-sm transition-all" data-path="deadlines-deliverables" href="#"><span class="material-symbols-outlined text-[18px]">assignment_late</span><span>Deadlines</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-neutral-500 hover:text-on-surface transition-colors font-medium text-xs" data-path="schedule-timetable" href="#"><span class="material-symbols-outlined text-[18px]">calendar_today</span><span>Timetable</span></a></nav></div>
+<!-- Client-side Interactive Behaviors & Modal Controller -->
+<script>
+  // Task Completion micro-interactions
+  function attachCompleteListeners() {
+    document.querySelectorAll('.complete-btn').forEach(btn => {
+      btn.onclick = function(e) {
+        e.stopPropagation();
+        const card = this.closest('.deliverable-card');
+        const icon = this.querySelector('.material-symbols-outlined');
+        const label = this.querySelector('.btn-label');
+
+        if (!card.dataset.completed) {
+          card.dataset.completed = 'true';
+          card.classList.add('opacity-45');
+          if (icon) {
+            icon.textContent = 'check_circle';
+            icon.style.fontVariationSettings = "'FILL' 1";
+            icon.classList.add('text-secondary');
+          }
+          if (label) label.textContent = 'Done';
+        } else {
+          delete card.dataset.completed;
+          card.classList.remove('opacity-45');
+          if (icon) {
+            icon.textContent = 'check_circle';
+            icon.style.fontVariationSettings = "'FILL' 0";
+            icon.classList.remove('text-secondary');
+          }
+          if (label) label.textContent = 'Mark Complete';
+        }
+      };
+    });
+  }
+  attachCompleteListeners();
+
+  // Modal Open & Close logic
+  const modal = document.getElementById('add-task-modal');
+  const backdrop = document.getElementById('modal-backdrop');
+  const sheet = document.getElementById('modal-sheet');
+  const openBtnHeader = document.getElementById('header-add-task-btn');
+  const openBtnMain = document.getElementById('add-deadline-btn');
+  const discardBtn = document.getElementById('modal-discard-btn');
+  const scheduleBtn = document.getElementById('modal-confirm-schedule-btn');
+
+  function openModal() {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    // Animate in
+    requestAnimationFrame(() => {
+      backdrop.classList.remove('opacity-0');
+      backdrop.classList.add('opacity-100');
+      sheet.classList.remove('translate-y-full');
+      sheet.classList.add('translate-y-0');
+    });
+  }
+
+  function closeModal() {
+    backdrop.classList.remove('opacity-100');
+    backdrop.classList.add('opacity-0');
+    sheet.classList.remove('translate-y-0');
+    sheet.classList.add('translate-y-full');
+    setTimeout(() => {
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }, 300);
+  }
+
+  if (openBtnHeader) openBtnHeader.addEventListener('click', openModal);
+  if (openBtnMain) openBtnMain.addEventListener('click', openModal);
+  if (discardBtn) discardBtn.addEventListener('click', closeModal);
+  if (backdrop) backdrop.addEventListener('click', closeModal);
+
+  // Modal Grade Weight Slider
+  const modalSlider = document.getElementById('modal-grade-weight-slider');
+  const modalSliderLabel = document.getElementById('modal-grade-weight-label');
+  if (modalSlider && modalSliderLabel) {
+    modalSlider.addEventListener('input', (e) => {
+      modalSliderLabel.textContent = `${e.target.value}% of Final`;
+    });
+  }
+
+  // Course Pills in Modal
+  let selectedCourse = 'MATH401';
+  let selectedCourseSub = 'Mathematics IV';
+  const modalCoursePills = document.querySelectorAll('.modal-course-pill');
+  modalCoursePills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      modalCoursePills.forEach(p => {
+        p.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+        p.classList.add('bg-surface-container', 'text-on-surface');
+        const dot = p.querySelector('span:first-child');
+        if (dot) {
+          dot.classList.remove('bg-secondary-fixed');
+          dot.classList.add('bg-outline-variant');
+        }
+      });
+      pill.classList.remove('bg-surface-container', 'text-on-surface');
+      pill.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+      const activeDot = pill.querySelector('span:first-child');
+      if (activeDot) {
+        activeDot.classList.remove('bg-outline-variant');
+        activeDot.classList.add('bg-secondary-fixed');
+      }
+      selectedCourse = pill.dataset.course || 'MATH401';
+      selectedCourseSub = pill.dataset.courseSub || 'Adv. Math';
+    });
+  });
+
+  // Category Selection in Modal
+  let selectedCategory = 'Assignment';
+  const modalCategoryButtons = document.querySelectorAll('.modal-category-toggle');
+  modalCategoryButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      modalCategoryButtons.forEach(b => {
+        b.classList.remove('bg-secondary-container', 'text-on-secondary-container');
+        b.classList.add('bg-surface-container-lowest', 'text-on-surface');
+      });
+      btn.classList.remove('bg-surface-container-lowest', 'text-on-surface');
+      btn.classList.add('bg-secondary-container', 'text-on-secondary-container');
+      selectedCategory = btn.dataset.category || 'Assignment';
+    });
+  });
+
+  // Preset Buttons (Date & Time quick pickers)
+  const presetBtns = document.querySelectorAll('.modal-preset-btn');
+  const dateValEl = document.getElementById('modal-date-val');
+  const dateSubEl = document.getElementById('modal-date-sub');
+  const timeValEl = document.getElementById('modal-time-val');
+  presetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      presetBtns.forEach(b => b.classList.remove('bg-primary', 'text-on-primary'));
+      btn.classList.add('bg-primary', 'text-on-primary');
+      if (dateValEl) dateValEl.textContent = btn.dataset.date;
+      if (dateSubEl) dateSubEl.textContent = btn.dataset.datesub;
+      if (timeValEl) timeValEl.textContent = btn.dataset.time;
+    });
+  });
+
+  // Platform selection in Modal
+  const modalPlatformBtns = document.querySelectorAll('.modal-platform-btn');
+  let selectedPlatform = 'Moodle Portal';
+  modalPlatformBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      modalPlatformBtns.forEach(b => {
+        b.classList.remove('bg-surface-container-high');
+        b.classList.add('bg-surface-container-low');
+      });
+      btn.classList.remove('bg-surface-container-low');
+      btn.classList.add('bg-surface-container-high');
+      selectedPlatform = btn.dataset.platform || 'Moodle Portal';
+    });
+  });
+
+  // Schedule & Arm Reminders Action
+  let pendingCount = 5;
+  if (scheduleBtn) {
+    scheduleBtn.addEventListener('click', () => {
+      const origHtml = scheduleBtn.innerHTML;
+      scheduleBtn.innerHTML = `
+        <span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+        <span class="font-label-code text-label-code font-semibold tracking-wide uppercase">Armed &amp; Synced!</span>
+      `;
+      scheduleBtn.disabled = true;
+
+      const titleInput = document.getElementById('modal-task-title-input');
+      const title = (titleInput && titleInput.value.trim()) ? titleInput.value.trim() : 'PS 6: Fourier Matrix Transforms';
+      const weight = modalSlider ? modalSlider.value : '15';
+      const dateText = dateValEl ? dateValEl.textContent : 'Nov 14';
+      const timeText = timeValEl ? timeValEl.textContent : '11:59 PM';
+
+      setTimeout(() => {
+        // Create new card and inject at the top of tasks container
+        const tasksContainer = document.getElementById('tasks-container');
+        if (tasksContainer) {
+          const newCard = document.createElement('div');
+          newCard.className = "deliverable-card bg-surface-container/75 backdrop-blur-xl rounded-xl p-space-md shadow-[0_8px_32px_-4px_rgba(0,0,0,0.35)] flex flex-col justify-between transition-all duration-300 gap-3 ring-2 ring-secondary/30";
+          newCard.innerHTML = `
+            <div class="flex flex-col gap-2.5">
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex items-center gap-2 flex-wrap min-w-0">
+                  <span class="font-label-code text-label-code text-tertiary-fixed-dim bg-tertiary-container/60 px-2 py-0.5 rounded">${selectedCourse}</span>
+                  <span class="px-2 py-0.5 rounded-full bg-[#E89A68]/15 text-[#e89a68] font-label-tag text-label-tag">${selectedCategory}</span>
+                  <span class="text-on-surface-variant font-body-sm text-body-sm truncate">${selectedCourseSub}</span>
+                </div>
+                <span class="shrink-0 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-tag text-label-tag font-semibold flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+                  Just Added
+                </span>
+              </div>
+              <div class="flex flex-col gap-1">
+                <h3 class="font-headline-sm text-headline-sm text-on-surface leading-snug">${title}</h3>
+                <p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-on-surface-variant">schedule</span>
+                  <span>Due ${dateText}, ${timeText} • <span class="text-on-surface">${weight}% Course Grade</span></span>
+                </p>
+              </div>
+              <div class="bg-surface-container-low/90 rounded-lg p-2.5 flex items-center justify-between text-body-sm">
+                <div class="flex items-center gap-2 text-on-surface-variant min-w-0 truncate">
+                  <span class="material-symbols-outlined text-[16px] text-secondary shrink-0">cloud_upload</span>
+                  <span class="font-label-code text-label-code truncate">Submission via ${selectedPlatform}</span>
+                </div>
+                <span class="font-label-code text-[11px] text-secondary shrink-0">Auto-sync Ready</span>
+              </div>
+            </div>
+            <div class="border-t border-surface-variant/40 pt-2.5 mt-auto flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 text-secondary font-label-code text-label-code min-w-0 truncate">
+                <span class="material-symbols-outlined text-[16px] text-secondary shrink-0">notifications_active</span>
+                <span class="truncate">3 Reminders Armed</span>
+              </div>
+              <button class="complete-btn shrink-0 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-label-tag text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-variant active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-[16px] status-check">check_circle</span>
+                <span class="btn-label">Mark Complete</span>
+              </button>
+            </div>
+          `;
+          tasksContainer.insertBefore(newCard, tasksContainer.firstChild);
+          attachCompleteListeners();
+
+          // Increment counter
+          pendingCount += 1;
+          const counterEl = document.getElementById('pending-counter-badge');
+          if (counterEl) counterEl.textContent = `${pendingCount} Pending`;
+        }
+
+        scheduleBtn.innerHTML = origHtml;
+        scheduleBtn.disabled = false;
+        closeModal();
+      }, 650);
+    });
+  }
+</script>
+
+
+
+
+</body></html>
