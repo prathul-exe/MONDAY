@@ -2,7 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase } = require('../database/db');
+const { getDatabase, isUniqueConstraintError } = require('../database/db');
 const { authenticate, generateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -24,7 +24,7 @@ router.post('/register', [
     const { email, password, full_name, student_id, department, semester } = req.body;
 
     // Check if email exists
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existing = await db.get('SELECT id FROM users WHERE email = ?', email);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
@@ -32,21 +32,25 @@ router.post('/register', [
     const id = uuidv4();
     const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    db.prepare(`
-      INSERT INTO users (id, email, password_hash, full_name, student_id, department, semester)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, email, password_hash, full_name, student_id || null, department || null, semester || 1);
+    await db.transaction(async (tx) => {
+      await tx.run(`
+        INSERT INTO users (id, email, password_hash, full_name, student_id, department, semester)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, id, email, password_hash, full_name, student_id || null, department || null, semester || 1);
 
-    // Create default settings
-    db.prepare(`
-      INSERT INTO user_settings (id, user_id) VALUES (?, ?)
-    `).run(uuidv4(), id);
+      await tx.run(`
+        INSERT INTO user_settings (id, user_id) VALUES (?, ?)
+      `, uuidv4(), id);
+    });
 
     const user = { id, email, full_name, student_id, department, semester: semester || 1 };
     const token = generateToken(user);
 
     res.status(201).json({ token, user });
   } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
   }
@@ -66,7 +70,7 @@ router.post('/login', [
     const db = getDatabase();
     const { email, password } = req.body;
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const user = await db.get('SELECT * FROM users WHERE email = ?', email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -87,10 +91,10 @@ router.post('/login', [
 });
 
 // GET /api/auth/me
-router.get('/me', authenticate, (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
   try {
     const db = getDatabase();
-    const user = db.prepare('SELECT id, email, full_name, student_id, department, semester, profile_image, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = await db.get('SELECT id, email, full_name, student_id, department, semester, profile_image, created_at FROM users WHERE id = ?', req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -105,22 +109,23 @@ router.put('/me', authenticate, [
   body('student_id').optional().trim(),
   body('department').optional().trim(),
   body('semester').optional().isInt({ min: 1, max: 12 })
-], (req, res) => {
+], async (req, res) => {
   try {
     const db = getDatabase();
     const { full_name, student_id, department, semester } = req.body;
-    
-    db.prepare(`
-      UPDATE users SET 
+
+    await db.run(`
+      UPDATE users SET
         full_name = COALESCE(?, full_name),
         student_id = COALESCE(?, student_id),
         department = COALESCE(?, department),
         semester = COALESCE(?, semester),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(full_name, student_id, department, semester, req.user.id);
+    `, full_name, student_id, department, semester, req.user.id);
 
-    const user = db.prepare('SELECT id, email, full_name, student_id, department, semester, profile_image, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = await db.get('SELECT id, email, full_name, student_id, department, semester, profile_image, created_at FROM users WHERE id = ?', req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (err) {
     console.error('Update user error:', err);
@@ -137,10 +142,10 @@ router.post('/forgot-password', [
 });
 
 // DELETE /api/auth/me - Permanently delete account and all associated data
-router.delete('/me', authenticate, (req, res) => {
+router.delete('/me', authenticate, async (req, res) => {
   try {
     const db = getDatabase();
-    const result = db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
+    const result = await db.run('DELETE FROM users WHERE id = ?', req.user.id);
     if (result.changes === 0) {
       return res.status(404).json({ error: 'User not found' });
     }

@@ -7,17 +7,17 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET /api/dashboard
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.id;
 
-    const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) || {
+    const settings = (await db.get('SELECT * FROM user_settings WHERE user_id = ?', userId)) || {
       min_attendance_threshold: 75,
       warning_threshold: 80
     };
 
-    const subjects = db.prepare('SELECT * FROM subjects WHERE user_id = ? AND is_active = 1 ORDER BY name').all(userId);
+    const subjects = await db.all('SELECT * FROM subjects WHERE user_id = ? AND is_active = 1 ORDER BY name', userId);
 
     let totalAttended = 0;
     let totalAbsent = 0;
@@ -29,18 +29,18 @@ router.get('/', (req, res) => {
     const improvementSuggestions = [];
 
     for (const s of subjects) {
-      const counts = db.prepare(`
+      const counts = await db.all(`
         SELECT status, COUNT(*) as count
         FROM attendance_records
         WHERE subject_id = ? AND user_id = ?
         GROUP BY status
-      `).all(s.id, userId);
+      `, s.id, userId);
 
       let attended = 0, absent = 0, excused = 0;
       for (const c of counts) {
-        if (c.status === 'present') attended = c.count;
-        else if (c.status === 'absent') absent = c.count;
-        else if (c.status === 'excused') excused = c.count;
+        if (c.status === 'present') attended = Number(c.count);
+        else if (c.status === 'absent') absent = Number(c.count);
+        else if (c.status === 'excused') excused = Number(c.count);
       }
 
       const total = attended + absent;
@@ -101,25 +101,25 @@ router.get('/', (req, res) => {
     const totalClasses = totalAttended + totalAbsent;
     const overallAttendance = Math.round(engine.calculatePercentage(totalAttended, totalClasses) * 10) / 10;
 
-    const upcomingDeadlines = db.prepare(`
+    const upcomingDeadlines = await db.all(`
       SELECT d.*, s.code as subject_code, s.name as subject_name
       FROM deadlines d
       LEFT JOIN subjects s ON d.subject_id = s.id
       WHERE d.user_id = ? AND d.is_completed = 0
       ORDER BY d.due_date ASC, d.due_time ASC
       LIMIT 5
-    `).all(userId);
+    `, userId);
 
-    const recentNotifications = db.prepare(`
+    const recentNotifications = await db.all(`
       SELECT * FROM notifications
       WHERE user_id = ? AND is_read = 0
       ORDER BY created_at DESC
       LIMIT 10
-    `).all(userId);
+    `, userId);
 
-    const calendar = db.prepare(`
+    const calendar = await db.get(`
       SELECT * FROM academic_calendar WHERE user_id = ? AND is_current = 1 LIMIT 1
-    `).get(userId);
+    `, userId);
 
     res.json({
       overall_attendance: overallAttendance,

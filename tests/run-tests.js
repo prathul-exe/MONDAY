@@ -3,16 +3,41 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Use a dedicated test database
+// Load .env first so configured DATABASE_URL is visible to the safety guard.
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+// Default to an isolated SQLite test database even if .env sets DB_CLIENT=postgres or DATABASE_URL.
+// PostgreSQL testing requires explicit opt-in via TEST_DB_CLIENT=postgres and TEST_DATABASE_URL.
 const testDbPath = path.join(__dirname, 'test-attendance.db');
-if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
-process.env.DB_PATH = testDbPath;
+const usePostgresTests = (process.env.TEST_DB_CLIENT || '').trim().toLowerCase() === 'postgres';
+const configuredDatabaseUrl = (process.env.DATABASE_URL || '').trim();
+
+if (usePostgresTests) {
+  const testUrl = (process.env.TEST_DATABASE_URL || '').trim();
+  if (!testUrl) {
+    console.error('ERROR: TEST_DB_CLIENT=postgres requires TEST_DATABASE_URL to be set.');
+    process.exit(1);
+  }
+  if (configuredDatabaseUrl && testUrl === configuredDatabaseUrl) {
+    console.error('ERROR: TEST_DATABASE_URL matches DATABASE_URL. Refusing to run tests against production.');
+    process.exit(1);
+  }
+  process.env.DB_CLIENT = 'postgres';
+  process.env.DATABASE_URL = testUrl;
+} else {
+  if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+  process.env.DB_CLIENT = 'sqlite';
+  process.env.DB_PATH = testDbPath;
+}
 process.env.JWT_SECRET = 'test-secret-key';
 process.env.BCRYPT_ROUNDS = '4'; // Fast hashing for tests
 
+const { DatabaseSync } = require('node:sqlite');
 const engine = require('../services/attendance-engine');
 const app = require('../server');
-const { close } = require('../database/db');
+const { close, getDatabase, getDbClient, isPostgres, emptyToNull } = require('../database/db');
+const { convertPlaceholders, transformSqlForPostgres } = require('../database/pg');
+const { TABLES, valuesMatch, findRowMismatches, verifyData, runMigration } = require('../scripts/migrate-sqlite-to-pg');
 
 let passed = 0;
 let failed = 0;
@@ -106,15 +131,167 @@ async function runAll() {
     assert.strictEqual(overall, 38);
   });
 
+  test('DB_CLIENT defaults to sqlite even when DATABASE_URL is set', () => {
+    const prevClient = process.env.DB_CLIENT;
+    const prevUrl = process.env.DATABASE_URL;
+    try {
+      delete process.env.DB_CLIENT;
+      process.env.DATABASE_URL = 'postgres://user:pass@localhost:5432/db';
+      assert.strictEqual(getDbClient(), 'sqlite');
+      assert.strictEqual(isPostgres(), false);
+
+      process.env.DB_CLIENT = 'postgres';
+      assert.strictEqual(getDbClient(), 'postgres');
+      assert.strictEqual(isPostgres(), true);
+    } finally {
+      if (prevClient === undefined) delete process.env.DB_CLIENT;
+      else process.env.DB_CLIENT = prevClient;
+      if (prevUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prevUrl;
+    }
+  });
+
+  test('PostgreSQL SQL transformer converts placeholders and boolean literals safely', () => {
+    assert.strictEqual(
+      convertPlaceholders("SELECT * FROM users WHERE email = ? AND note = 'why?' AND id = ?"),
+      "SELECT * FROM users WHERE email = $1 AND note = 'why?' AND id = $2"
+    );
+    assert.strictEqual(
+      convertPlaceholders("SELECT 'it''s ?' AS q, \"col?\" FROM tbl WHERE a = ? -- comment?\n/* nested /* ? */ ? */ AND b = ?"),
+      "SELECT 'it''s ?' AS q, \"col?\" FROM tbl WHERE a = $1 -- comment?\n/* nested /* ? */ ? */ AND b = $2"
+    );
+    assert.strictEqual(
+      convertPlaceholders("SELECT $$hello ?$$, $tag$world ?$tag$ WHERE id = ?"),
+      "SELECT $$hello ?$$, $tag$world ?$tag$ WHERE id = $1"
+    );
+    assert.strictEqual(
+      transformSqlForPostgres("SELECT * FROM subjects WHERE user_id = ? AND is_active = 1 AND note = 'is_active = 1' -- is_active = 0\n"),
+      "SELECT * FROM subjects WHERE user_id = $1 AND is_active = TRUE AND note = 'is_active = 1' -- is_active = 0\n"
+    );
+    assert.strictEqual(
+      transformSqlForPostgres('UPDATE deadlines SET is_completed = 0 WHERE id = ? AND is_completed = 1'),
+      'UPDATE deadlines SET is_completed = FALSE WHERE id = $1 AND is_completed = TRUE'
+    );
+  });
+
+  test('emptyToNull normalizes empty and whitespace strings to null', () => {
+    assert.strictEqual(emptyToNull(''), null);
+    assert.strictEqual(emptyToNull('   '), null);
+    assert.strictEqual(emptyToNull(undefined), null);
+    assert.strictEqual(emptyToNull(null), null);
+    assert.strictEqual(emptyToNull(0), 0);
+    assert.strictEqual(emptyToNull('09:00'), '09:00');
+  });
+
+  await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {
+    assert.strictEqual(valuesMatch('2026-11-25 10:00:00', new Date('2026-11-25T10:00:00.000Z'), 'created_at', []), true);
+    assert.strictEqual(valuesMatch(1, true, 'is_active', ['is_active']), true);
+    assert.strictEqual(valuesMatch('09:00', '09:00:00', 'start_time', []), true);
+
+    const fixtureDbPath = path.join(__dirname, 'temp-migrate-fixture.db');
+    if (fs.existsSync(fixtureDbPath)) fs.unlinkSync(fixtureDbPath);
+    const schemaSql = fs.readFileSync(path.join(__dirname, '..', 'database', 'schema.sql'), 'utf8');
+    const setupDb = new DatabaseSync(fixtureDbPath);
+    setupDb.exec(schemaSql);
+    setupDb.prepare(`
+      INSERT INTO users (id, email, password_hash, full_name, semester)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('11111111-1111-1111-1111-111111111111', 'fixture@example.com', 'hash123', 'Fixture User', 3);
+    setupDb.close();
+
+    const roDb = new DatabaseSync(fixtureDbPath, { readOnly: true });
+    try {
+      const executed = [];
+      const emptyPgClient = {
+        async query(sql) {
+          executed.push(sql);
+          return { rows: [] };
+        }
+      };
+      const dryRes = await runMigration(roDb, emptyPgClient, { dryRun: true });
+      assert.strictEqual(dryRes.insertedTotal, 1);
+      assert(executed.includes('BEGIN'));
+      assert(executed.includes('ROLLBACK'));
+      assert(!executed.some((q) => q.startsWith('INSERT ')));
+
+      // Matching PG data passes verifyData
+      const matchingPgClient = {
+        async query(sql) {
+          if (sql.includes('FROM public.users')) {
+            return {
+              rows: [{
+                id: '11111111-1111-1111-1111-111111111111',
+                email: 'fixture@example.com',
+                password_hash: 'hash123',
+                full_name: 'Fixture User',
+                student_id: null,
+                department: null,
+                semester: 3,
+                profile_image: null,
+                created_at: new Date(),
+                updated_at: new Date()
+              }]
+            };
+          }
+          return { rows: [] };
+        }
+      };
+      // Check findRowMismatches detects password_hash conflict
+      const usersTable = TABLES.find((t) => t.name === 'users');
+      const diffs = findRowMismatches(
+        roDb.prepare('SELECT * FROM users').get(),
+        { ...(await matchingPgClient.query('FROM public.users')).rows[0], password_hash: 'different-hash' },
+        usersTable
+      );
+      assert(diffs.some((d) => d.field === 'password_hash'));
+
+      // Conflict aborts runMigration
+      const conflictPgClient = {
+        async query(sql) {
+          if (sql.includes('FROM public.users')) {
+            return {
+              rows: [{
+                id: '11111111-1111-1111-1111-111111111111',
+                email: 'other-email@example.com',
+                password_hash: 'hash123',
+                full_name: 'Fixture User',
+                student_id: null,
+                department: null,
+                semester: 3,
+                profile_image: null,
+                created_at: new Date(),
+                updated_at: new Date()
+              }]
+            };
+          }
+          return { rows: [] };
+        }
+      };
+      await assert.rejects(() => runMigration(roDb, conflictPgClient, { dryRun: true }), /conflicting existing IDs/);
+      await assert.rejects(() => verifyData(roDb, emptyPgClient), /Verification failed/);
+    } finally {
+      roDb.close();
+      if (fs.existsSync(fixtureDbPath)) fs.unlinkSync(fixtureDbPath);
+    }
+  });
+
   console.log('\n--- Integration Tests: API, Auth, Isolation & CRUD ---');
 
   const server = app.listen(0);
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const emailA = `maya-${runId}@example.com`;
+  const emailB = `other-${runId}@example.com`;
+  const createdUserIds = [];
+
   let tokenA = '';
   let tokenB = '';
   let subjectId = '';
   let attendanceId = '';
   let deadlineId = '';
   let slotId = '';
+  let lunchSlotId = '';
+  let holidayId = '';
+  let notifId = '';
 
   try {
     await asyncTest('GET /api/health and /api/v1/health return 200 ok', async () => {
@@ -153,7 +330,7 @@ async function runAll() {
 
     await asyncTest('User registration works and returns JWT + user without password_hash', async () => {
       const res = await request(server, 'POST', '/api/auth/register', {
-        email: 'maya@example.com',
+        email: emailA,
         password: 'Password123!',
         full_name: 'Maya Lin',
         student_id: 'CS-2025-01',
@@ -161,14 +338,15 @@ async function runAll() {
       });
       assert.strictEqual(res.status, 201);
       assert(res.body.token);
-      assert.strictEqual(res.body.user.email, 'maya@example.com');
+      assert.strictEqual(res.body.user.email, emailA);
       assert.strictEqual(res.body.user.password_hash, undefined);
       tokenA = res.body.token;
+      createdUserIds.push(res.body.user.id);
     });
 
     await asyncTest('Login rejects invalid credentials with 401', async () => {
       const res = await request(server, 'POST', '/api/auth/login', {
-        email: 'maya@example.com',
+        email: emailA,
         password: 'wrongpassword'
       });
       assert.strictEqual(res.status, 401);
@@ -176,7 +354,7 @@ async function runAll() {
 
     await asyncTest('Login succeeds with valid credentials', async () => {
       const res = await request(server, 'POST', '/api/auth/login', {
-        email: 'maya@example.com',
+        email: emailA,
         password: 'Password123!'
       });
       assert.strictEqual(res.status, 200);
@@ -216,13 +394,28 @@ async function runAll() {
       assert.strictEqual(dup.status, 409);
     });
 
-    await asyncTest('Edit attendance updates subject percentage dynamically', async () => {
-      const res = await request(server, 'PUT', `/api/attendance/${attendanceId}`, {
-        status: 'absent'
+    await asyncTest('Edit attendance updates subject percentage dynamically and logs exact audit trail', async () => {
+      const editRes = await request(server, 'PUT', `/api/attendance/${attendanceId}`, {
+        status: 'absent',
+        start_time: ''
       }, tokenA);
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.body.subject.percentage, 0);
-      assert.strictEqual(res.body.subject.absent, 1);
+      assert.strictEqual(editRes.status, 200);
+      assert.strictEqual(editRes.body.subject.percentage, 0);
+      assert.strictEqual(editRes.body.subject.absent, 1);
+
+      const db = getDatabase();
+      const auditRows = await db.all(
+        'SELECT action, old_status, new_status FROM attendance_audit_log WHERE record_id = ?',
+        attendanceId
+      );
+      assert.strictEqual(auditRows.length, 2);
+      const insertRow = auditRows.find((r) => r.action === 'INSERT');
+      const updateRow = auditRows.find((r) => r.action === 'UPDATE');
+      assert(insertRow, 'Expected INSERT audit row');
+      assert(updateRow, 'Expected UPDATE audit row');
+      assert.strictEqual(insertRow.new_status, 'present');
+      assert.strictEqual(updateRow.old_status, 'present');
+      assert.strictEqual(updateRow.new_status, 'absent');
     });
 
     await asyncTest('Dashboard reflects dynamic database calculations', async () => {
@@ -246,7 +439,20 @@ async function runAll() {
 
       const compRes = await request(server, 'PUT', `/api/deadlines/${deadlineId}/complete`, {}, tokenA);
       assert.strictEqual(compRes.status, 200);
-      assert.strictEqual(compRes.body.is_completed, 1);
+      assert.strictEqual(compRes.body.is_completed, isPostgres() ? true : 1);
+
+      const emptyPutRes = await request(server, 'PUT', `/api/deadlines/${deadlineId}`, {
+        due_date: '',
+        due_time: '',
+        grade_weight: ''
+      }, tokenA);
+      assert.strictEqual(emptyPutRes.status, 200);
+      assert.strictEqual(emptyPutRes.body.due_date, '2026-12-01');
+
+      const uncompRes = await request(server, 'PUT', `/api/deadlines/${deadlineId}/uncomplete`, {}, tokenA);
+      assert.strictEqual(uncompRes.status, 200);
+      assert.strictEqual(uncompRes.body.is_completed, isPostgres() ? false : 0);
+      assert.strictEqual(uncompRes.body.completed_at, null);
     });
 
     await asyncTest('Timetable CRUD (including Lunch Break without subject) and settings update', async () => {
@@ -269,6 +475,17 @@ async function runAll() {
       assert.strictEqual(lunchRes.status, 201);
       assert.strictEqual(lunchRes.body.session_type, 'lunch');
       assert.strictEqual(lunchRes.body.subject_id, null);
+      lunchSlotId = lunchRes.body.id;
+
+      const lunchUpdateRes = await request(server, 'PUT', `/api/timetable/${lunchSlotId}`, {
+        room: 'Main Hall'
+      }, tokenA);
+      assert.strictEqual(lunchUpdateRes.status, 200);
+      assert.strictEqual(lunchUpdateRes.body.subject_id, null);
+      assert.strictEqual(lunchUpdateRes.body.room, 'Main Hall');
+
+      const lunchDelRes = await request(server, 'DELETE', `/api/timetable/${lunchSlotId}`, null, tokenA);
+      assert.strictEqual(lunchDelRes.status, 200);
 
       const breakRes = await request(server, 'POST', '/api/timetable', {
         day_of_week: 1,
@@ -289,17 +506,260 @@ async function runAll() {
 
     await asyncTest('User data isolation: User B cannot view or modify User A subjects', async () => {
       const regB = await request(server, 'POST', '/api/auth/register', {
-        email: 'other@example.com',
+        email: emailB,
         password: 'Password123!',
         full_name: 'Other Student'
       });
+      assert.strictEqual(regB.status, 201);
       tokenB = regB.body.token;
+      createdUserIds.push(regB.body.user.id);
 
       const getRes = await request(server, 'GET', `/api/subjects/${subjectId}`, null, tokenB);
       assert.strictEqual(getRes.status, 404);
 
       const delRes = await request(server, 'DELETE', `/api/subjects/${subjectId}`, null, tokenB);
       assert.strictEqual(delRes.status, 404);
+    });
+
+    await asyncTest('Academic calendar and holidays CRUD with ownership isolation', async () => {
+      const putCal1 = await request(server, 'PUT', '/api/calendar', {
+        semester_name: 'Fall 2026',
+        semester_number: 5,
+        start_date: '2026-08-15',
+        end_date: '2026-12-15'
+      }, tokenA);
+      assert.strictEqual(putCal1.status, 201);
+      assert.strictEqual(putCal1.body.semester_name, 'Fall 2026');
+      assert.strictEqual(putCal1.body.is_current, isPostgres() ? true : 1);
+
+      const putCal2 = await request(server, 'PUT', '/api/calendar', {
+        semester_name: 'Fall 2026 Updated',
+        semester_number: 5,
+        start_date: '2026-08-15',
+        end_date: '2026-12-20'
+      }, tokenA);
+      assert.strictEqual(putCal2.status, 200);
+      assert.strictEqual(putCal2.body.semester_name, 'Fall 2026 Updated');
+
+      const holCreate = await request(server, 'POST', '/api/calendar/holidays', {
+        name: 'Winter Break',
+        date: '2026-12-10'
+      }, tokenA);
+      assert.strictEqual(holCreate.status, 201);
+      assert.strictEqual(holCreate.body.date, '2026-12-10');
+      holidayId = holCreate.body.id;
+
+      const getCalA = await request(server, 'GET', '/api/calendar', null, tokenA);
+      assert.strictEqual(getCalA.status, 200);
+      assert.strictEqual(getCalA.body.calendar.semester_name, 'Fall 2026 Updated');
+      assert.strictEqual(getCalA.body.holidays.length, 1);
+
+      const getCalB = await request(server, 'GET', '/api/calendar', null, tokenB);
+      assert.strictEqual(getCalB.status, 200);
+      assert.strictEqual(getCalB.body.calendar, null);
+      assert.strictEqual(getCalB.body.holidays.length, 0);
+
+      const delHolB = await request(server, 'DELETE', `/api/calendar/holidays/${holidayId}`, null, tokenB);
+      assert.strictEqual(delHolB.status, 404);
+
+      const delHolA = await request(server, 'DELETE', `/api/calendar/holidays/${holidayId}`, null, tokenA);
+      assert.strictEqual(delHolA.status, 200);
+
+      const getCalAAfter = await request(server, 'GET', '/api/calendar', null, tokenA);
+      assert.strictEqual(getCalAAfter.body.holidays.length, 0);
+    });
+
+    await asyncTest('Notifications generation, deduplication, read state and isolation', async () => {
+      const list1 = await request(server, 'GET', '/api/notifications', null, tokenA);
+      assert.strictEqual(list1.status, 200);
+      assert.strictEqual(list1.body.length, 1);
+      assert.strictEqual(list1.body[0].type, 'attendance_shortage');
+      assert.strictEqual(list1.body[0].is_read, isPostgres() ? false : 0);
+      notifId = list1.body[0].id;
+
+      // Fetching again while unread must not create a duplicate notification
+      const list2 = await request(server, 'GET', '/api/notifications', null, tokenA);
+      assert.strictEqual(list2.status, 200);
+      assert.strictEqual(list2.body.length, 1);
+
+      const unread1 = await request(server, 'GET', '/api/notifications/unread-count', null, tokenA);
+      assert.strictEqual(unread1.status, 200);
+      assert.strictEqual(unread1.body.count, 1);
+
+      const readB = await request(server, 'PUT', `/api/notifications/${notifId}/read`, {}, tokenB);
+      assert.strictEqual(readB.status, 404);
+
+      const readA = await request(server, 'PUT', `/api/notifications/${notifId}/read`, {}, tokenA);
+      assert.strictEqual(readA.status, 200);
+
+      const unread2 = await request(server, 'GET', '/api/notifications/unread-count', null, tokenA);
+      assert.strictEqual(unread2.body.count, 0);
+
+      const readAll = await request(server, 'PUT', '/api/notifications/read-all', {}, tokenA);
+      assert.strictEqual(readAll.status, 200);
+
+      const delNotif = await request(server, 'DELETE', `/api/notifications/${notifId}`, null, tokenA);
+      assert.strictEqual(delNotif.status, 200);
+    });
+
+    await asyncTest('User settings booleans and attendance reset isolation', async () => {
+      const getSet = await request(server, 'GET', '/api/settings', null, tokenA);
+      assert.strictEqual(getSet.status, 200);
+      assert.strictEqual(getSet.body.min_attendance_threshold, 80);
+
+      const putSet = await request(server, 'PUT', '/api/settings', {
+        smart_buffer_warnings: false,
+        critical_shortage_alert: false,
+        morning_rundown: true,
+        notification_enabled: false
+      }, tokenA);
+      assert.strictEqual(putSet.status, 200);
+      assert.strictEqual(putSet.body.smart_buffer_warnings, isPostgres() ? false : 0);
+      assert.strictEqual(putSet.body.critical_shortage_alert, isPostgres() ? false : 0);
+      assert.strictEqual(putSet.body.morning_rundown, isPostgres() ? true : 1);
+      assert.strictEqual(putSet.body.notification_enabled, isPostgres() ? false : 0);
+
+      // Create subject + attendance for User B to ensure User A reset does not touch User B
+      const subB = await request(server, 'POST', '/api/subjects', {
+        name: 'Linear Algebra',
+        code: 'MATH201'
+      }, tokenB);
+      assert.strictEqual(subB.status, 201);
+
+      const attB = await request(server, 'POST', '/api/attendance', {
+        subject_id: subB.body.id,
+        date: '2026-11-24',
+        start_time: '11:00:00',
+        status: 'present'
+      }, tokenB);
+      assert.strictEqual(attB.status, 201);
+
+      const resetA = await request(server, 'POST', '/api/settings/reset-attendance', {}, tokenA);
+      assert.strictEqual(resetA.status, 200);
+      assert.strictEqual(resetA.body.deleted, 1);
+
+      const attAAfter = await request(server, 'GET', '/api/attendance', null, tokenA);
+      assert.strictEqual(attAAfter.status, 200);
+      assert.strictEqual(attAAfter.body.length, 0);
+
+      const attBAfter = await request(server, 'GET', '/api/attendance', null, tokenB);
+      assert.strictEqual(attBAfter.status, 200);
+      assert.strictEqual(attBAfter.body.length, 1);
+
+      // User A's unrelated data (subjects) remains intact after attendance reset
+      const subAAfter = await request(server, 'GET', `/api/subjects/${subjectId}`, null, tokenA);
+      assert.strictEqual(subAAfter.status, 200);
+    });
+
+    await asyncTest('Invalid UUID / ID format returns 404 instead of 500', async () => {
+      const r1 = await request(server, 'GET', '/api/subjects/not-a-valid-uuid', null, tokenA);
+      assert.strictEqual(r1.status, 404);
+
+      const r2 = await request(server, 'PUT', '/api/attendance/not-a-valid-uuid', { status: 'present' }, tokenA);
+      assert.strictEqual(r2.status, 404);
+
+      const r3 = await request(server, 'DELETE', '/api/calendar/holidays/not-a-valid-uuid', null, tokenA);
+      assert.strictEqual(r3.status, 404);
+
+      const r4 = await request(server, 'PUT', '/api/notifications/not-a-valid-uuid/read', {}, tokenA);
+      assert.strictEqual(r4.status, 404);
+    });
+
+    await asyncTest('Calendar projection, subjects CRUD, deadlines isolation, attendance delete audit, and profile update', async () => {
+      // 1. Calendar projection & date-boundary behaviour
+      const projA = await request(server, 'GET', `/api/calendar/projection/${subjectId}?plannedAbsences=1`, null, tokenA);
+      assert.strictEqual(projA.status, 200);
+      assert.strictEqual(projA.body.has_semester_dates, true);
+      assert.strictEqual(projA.body.has_timetable, true);
+      assert.strictEqual(projA.body.is_estimate, true);
+      assert.strictEqual(typeof projA.body.projected_percentage, 'number');
+
+      const projBForbidden = await request(server, 'GET', `/api/calendar/projection/${subjectId}`, null, tokenB);
+      assert.strictEqual(projBForbidden.status, 404);
+
+      // Date boundary: past semester end_date yields classesRemaining = 0
+      const pastCal = await request(server, 'PUT', '/api/calendar', {
+        semester_name: 'Past Semester',
+        semester_number: 4,
+        start_date: '2025-01-01',
+        end_date: '2025-05-01'
+      }, tokenA);
+      assert.strictEqual(pastCal.status, 200);
+      const projPast = await request(server, 'GET', `/api/calendar/projection/${subjectId}`, null, tokenA);
+      assert.strictEqual(projPast.status, 200);
+      assert.strictEqual(projPast.body.classesRemaining, 0);
+
+      // 2. Subjects update, delete, and ownership isolation
+      const updSub = await request(server, 'PUT', `/api/subjects/${subjectId}`, {
+        name: 'Advanced Data Structures',
+        credits: ''
+      }, tokenA);
+      assert.strictEqual(updSub.status, 200);
+      assert.strictEqual(updSub.body.name, 'Advanced Data Structures');
+      assert.strictEqual(updSub.body.credits, 3);
+
+      const updSubB = await request(server, 'PUT', `/api/subjects/${subjectId}`, { name: 'Hacked' }, tokenB);
+      assert.strictEqual(updSubB.status, 404);
+
+      const tempSub = await request(server, 'POST', '/api/subjects', { name: 'Temp Sub', code: 'TMP101' }, tokenA);
+      assert.strictEqual(tempSub.status, 201);
+      const delTempSub = await request(server, 'DELETE', `/api/subjects/${tempSub.body.id}`, null, tokenA);
+      assert.strictEqual(delTempSub.status, 200);
+      const getDeletedSub = await request(server, 'GET', `/api/subjects/${tempSub.body.id}`, null, tokenA);
+      assert.strictEqual(getDeletedSub.status, 404);
+
+      // 3. Deadlines ownership isolation and delete
+      const dlB1 = await request(server, 'PUT', `/api/deadlines/${deadlineId}`, { title: 'Hacked' }, tokenB);
+      assert.strictEqual(dlB1.status, 404);
+      const dlB2 = await request(server, 'PUT', `/api/deadlines/${deadlineId}/complete`, {}, tokenB);
+      assert.strictEqual(dlB2.status, 404);
+      const dlB3 = await request(server, 'DELETE', `/api/deadlines/${deadlineId}`, null, tokenB);
+      assert.strictEqual(dlB3.status, 404);
+
+      const delDlA = await request(server, 'DELETE', `/api/deadlines/${deadlineId}`, null, tokenA);
+      assert.strictEqual(delDlA.status, 200);
+
+      // 4. Attendance delete, audit log DELETE entry, and isolation
+      const tempAtt = await request(server, 'POST', '/api/attendance', {
+        subject_id: subjectId,
+        date: '2026-11-25',
+        start_time: '14:00:00',
+        status: 'present'
+      }, tokenA);
+      assert.strictEqual(tempAtt.status, 201);
+      const tempAttId = tempAtt.body.record.id;
+
+      const delAttB = await request(server, 'DELETE', `/api/attendance/${tempAttId}`, null, tokenB);
+      assert.strictEqual(delAttB.status, 404);
+
+      const delAttA = await request(server, 'DELETE', `/api/attendance/${tempAttId}`, null, tokenA);
+      assert.strictEqual(delAttA.status, 200);
+
+      const db = getDatabase();
+      const delAudit = await db.all(
+        'SELECT action, old_status, new_status FROM attendance_audit_log WHERE record_id = ?',
+        tempAttId
+      );
+      assert.strictEqual(delAudit.length, 2);
+      const delInsertRow = delAudit.find((r) => r.action === 'INSERT');
+      const delDeleteRow = delAudit.find((r) => r.action === 'DELETE');
+      assert(delInsertRow, 'Expected INSERT audit row');
+      assert(delDeleteRow, 'Expected DELETE audit row');
+      assert.strictEqual(delInsertRow.new_status, 'present');
+      assert.strictEqual(delDeleteRow.old_status, 'present');
+
+      // 5. Profile update and isolation
+      const profA = await request(server, 'PUT', '/api/auth/me', {
+        full_name: 'Maya Lin Updated',
+        department: 'Computer Science'
+      }, tokenA);
+      assert.strictEqual(profA.status, 200);
+      assert.strictEqual(profA.body.full_name, 'Maya Lin Updated');
+      assert.strictEqual(profA.body.department, 'Computer Science');
+
+      const profB = await request(server, 'GET', '/api/auth/me', null, tokenB);
+      assert.strictEqual(profB.status, 200);
+      assert.strictEqual(profB.body.full_name, 'Other Student');
     });
 
     await asyncTest('Account deletion removes User A and cascades data without affecting User B', async () => {
@@ -311,12 +771,20 @@ async function runAll() {
 
       const userBMe = await request(server, 'GET', '/api/auth/me', null, tokenB);
       assert.strictEqual(userBMe.status, 200);
-      assert.strictEqual(userBMe.body.email, 'other@example.com');
+      assert.strictEqual(userBMe.body.email, emailB);
     });
   } finally {
+    try {
+      const db = getDatabase();
+      for (const uid of createdUserIds) {
+        await db.run('DELETE FROM users WHERE id = ?', uid);
+      }
+    } catch (cleanupErr) {
+      console.error('Test cleanup error:', cleanupErr.message);
+    }
     server.close();
-    close();
-    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    await close();
+    if (!isPostgres() && fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
   }
 
   console.log(`\nResults: ${passed} passed, ${failed} failed\n`);

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getDatabase, close } = require('../database/db');
 
-function backupDatabase() {
+async function backupDatabase() {
   const dbPath = path.resolve(process.env.DB_PATH || path.join(__dirname, '..', 'database', 'attendance.db'));
   if (!fs.existsSync(dbPath)) {
     console.error(`[backup] Database not found at ${dbPath}`);
@@ -16,8 +16,8 @@ function backupDatabase() {
 
   const db = getDatabase();
   // Flush WAL to main database file before copying
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
-  close();
+  await db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  await close();
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dest = path.join(backupDir, `attendance-${stamp}.db`);
@@ -25,4 +25,7 @@ function backupDatabase() {
   console.log(`[backup] Created backup: ${dest}`);
 }
 
-backupDatabase();
+backupDatabase().catch((err) => {
+  console.error('[backup] Backup failed:', err.message);
+  process.exit(1);
+});

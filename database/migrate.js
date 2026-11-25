@@ -4,6 +4,11 @@ const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
 function migrate() {
+  if ((process.env.DB_CLIENT || '').trim().toLowerCase() === 'postgres') {
+    console.log('[migrate] DB_CLIENT=postgres; skipping local SQLite migration.');
+    return;
+  }
+
   const dbPath = process.env.DB_PATH || path.join(__dirname, 'attendance.db');
   console.log(`[migrate] Database path: ${dbPath}`);
 
