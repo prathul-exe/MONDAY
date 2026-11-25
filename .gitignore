@@ -28,6 +28,15 @@ Thumbs.db
 dist/
 build/
 
+# Android / Capacitor generated build & signing files
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+*.jks
+*.keystore
+
 # Temp
 tmp/
 temp/

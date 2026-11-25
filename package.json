@@ -8,20 +8,35 @@
     "dev": "node --watch server.js",
     "test": "node tests/run-tests.js",
     "db:migrate": "node database/migrate.js",
-    "db:backup": "node scripts/backup-db.js"
+    "db:backup": "node scripts/backup-db.js",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
+    "capacitor-secure-storage-plugin": "^0.14.2",
     "cors": "^2.8.5",
-    "express-validator": "^7.0.1",
     "dotenv": "^16.3.1",
-    "uuid": "^9.0.0",
-    "node-cron": "^3.0.3"
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "uuid": "^9.0.0"
   },
-  "keywords": ["attendance", "tracker", "student", "academic"],
+  "keywords": [
+    "attendance",
+    "tracker",
+    "student",
+    "academic"
+  ],
   "license": "SEE LICENSE IN LICENSE"
 }

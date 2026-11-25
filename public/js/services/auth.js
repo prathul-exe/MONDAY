@@ -1,7 +1,8 @@
 const AuthService = {
     async login(email, password) {
         const result = await API.post('/auth/login', { email, password });
-        localStorage.setItem('monday_token', result.token);
+        if (typeof TokenStorage !== 'undefined') await TokenStorage.set(result.token);
+        else localStorage.setItem('monday_token', result.token);
         App.currentUser = result.user;
         return result;
     },
@@ -15,19 +16,21 @@ const AuthService = {
             department,
             semester: parseInt(semester) || 1
         });
-        localStorage.setItem('monday_token', result.token);
+        if (typeof TokenStorage !== 'undefined') await TokenStorage.set(result.token);
+        else localStorage.setItem('monday_token', result.token);
         App.currentUser = result.user;
         return result;
     },
 
-    logout() {
-        localStorage.removeItem('monday_token');
+    async logout() {
+        if (typeof TokenStorage !== 'undefined') await TokenStorage.remove();
+        else localStorage.removeItem('monday_token');
         App.currentUser = null;
         App.showOnboarding();
     },
 
     isAuthenticated() {
-        return !!localStorage.getItem('monday_token');
+        return !!(typeof TokenStorage !== 'undefined' ? TokenStorage.getSync() : localStorage.getItem('monday_token'));
     },
 
     async updateProfile(data) {

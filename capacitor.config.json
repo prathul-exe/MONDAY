@@ -1,0 +1,25 @@
+{
+  "appId": "com.monday.attendance",
+  "appName": "Monday",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#f9f9f6",
+      "androidScaleType": "CENTER_INSIDE",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#f9f9f6",
+      "overlaysWebView": false
+    }
+  }
+}
+

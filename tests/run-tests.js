@@ -117,10 +117,33 @@ async function runAll() {
   let slotId = '';
 
   try {
-    await asyncTest('GET /api/health returns 200 ok', async () => {
+    await asyncTest('GET /api/health and /api/v1/health return 200 ok', async () => {
       const res = await request(server, 'GET', '/api/health');
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.status, 'ok');
+
+      const v1 = await request(server, 'GET', '/api/v1/health');
+      assert.strictEqual(v1.status, 200);
+      assert.strictEqual(v1.body.apiVersion, '1.0.0');
+    });
+
+    await asyncTest('GET /api/system/version checks app version and update flags', async () => {
+      const prevLatest = process.env.LATEST_APP_VERSION;
+      const prevMin = process.env.MIN_SUPPORTED_APP_VERSION;
+      process.env.LATEST_APP_VERSION = '1.2.0';
+      process.env.MIN_SUPPORTED_APP_VERSION = '1.1.0';
+
+      const oldClient = await request(server, 'GET', '/api/v1/system/version?currentVersion=1.0.0');
+      assert.strictEqual(oldClient.status, 200);
+      assert.strictEqual(oldClient.body.updateAvailable, true);
+      assert.strictEqual(oldClient.body.forceUpdate, true);
+
+      const currentClient = await request(server, 'GET', '/api/v1/system/version?currentVersion=1.2.0');
+      assert.strictEqual(currentClient.body.updateAvailable, false);
+      assert.strictEqual(currentClient.body.forceUpdate, false);
+
+      process.env.LATEST_APP_VERSION = prevLatest || '1.0.0';
+      process.env.MIN_SUPPORTED_APP_VERSION = prevMin || '1.0.0';
     });
 
     await asyncTest('Unauthenticated access to /api/subjects is rejected with 401', async () => {

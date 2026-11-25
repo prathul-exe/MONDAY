@@ -22,7 +22,19 @@ app.use(helmet({
     }
   }
 }));
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,https://localhost,http://localhost,capacitor://localhost')
+  .split(',')
+  .map(o => o.trim());
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -47,20 +59,28 @@ app.use('/api/auth/register', authLimiter);
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/subjects', require('./routes/subjects'));
-app.use('/api/attendance', require('./routes/attendance'));
-app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/deadlines', require('./routes/deadlines'));
-app.use('/api/timetable', require('./routes/timetable'));
-app.use('/api/notifications', require('./routes/notifications'));
-app.use('/api/settings', require('./routes/settings'));
-app.use('/api/calendar', require('./routes/calendar'));
+// API Routes (v1 + backward-compatible unversioned aliases)
+const apiRouters = {
+  auth: require('./routes/auth'),
+  subjects: require('./routes/subjects'),
+  attendance: require('./routes/attendance'),
+  dashboard: require('./routes/dashboard'),
+  deadlines: require('./routes/deadlines'),
+  timetable: require('./routes/timetable'),
+  notifications: require('./routes/notifications'),
+  settings: require('./routes/settings'),
+  calendar: require('./routes/calendar'),
+  system: require('./routes/system')
+};
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+for (const [name, router] of Object.entries(apiRouters)) {
+  app.use(`/api/v1/${name}`, router);
+  app.use(`/api/${name}`, router);
+}
+
+// Health check (v1 + unversioned)
+app.get(['/api/v1/health', '/api/health'], (req, res) => {
+  res.json({ status: 'ok', apiVersion: '1.0.0', timestamp: new Date().toISOString() });
 });
 
 // Legal pages

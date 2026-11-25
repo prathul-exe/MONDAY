@@ -26,6 +26,15 @@ function migrate() {
     db.exec('PRAGMA foreign_keys = ON;');
     db.exec(schema);
 
+    // Track schema migration versions for backward-compatible upgrades
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version TEXT PRIMARY KEY,
+        applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)').run('001_initial_schema');
+
     // Ensure timetable_entries.subject_id is nullable for lunch/break slots
     const cols = db.prepare("PRAGMA table_info(timetable_entries);").all();
     const subjCol = cols.find(c => c.name === 'subject_id');

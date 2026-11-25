@@ -1,9 +1,16 @@
 const API = {
-    baseUrl: '/api',
+    get baseUrl() {
+        return typeof AppConfig !== 'undefined' ? AppConfig.getApiBaseUrl() : '/api/v1';
+    },
 
     getHeaders() {
-        const headers = { 'Content-Type': 'application/json' };
-        const token = localStorage.getItem('monday_token');
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-App-Version': typeof AppConfig !== 'undefined' ? AppConfig.APP_VERSION : '1.0.0'
+        };
+        const token = typeof TokenStorage !== 'undefined'
+            ? TokenStorage.getSync()
+            : localStorage.getItem('monday_token');
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
@@ -22,7 +29,8 @@ const API = {
         const response = await fetch(`${this.baseUrl}${endpoint}`, config);
 
         if (response.status === 401) {
-            localStorage.removeItem('monday_token');
+            if (typeof TokenStorage !== 'undefined') await TokenStorage.remove();
+            else localStorage.removeItem('monday_token');
             window.location.reload();
             throw new Error('Session expired');
         }

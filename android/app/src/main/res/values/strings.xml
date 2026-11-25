@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Monday</string>
+    <string name="title_activity_main">Monday</string>
+    <string name="package_name">com.monday.attendance</string>
+    <string name="custom_url_scheme">com.monday.attendance</string>
+</resources>
