@@ -31,12 +31,19 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       return callback(null, true);
     }
-    return callback(new Error('Not allowed by CORS'));
+    const err = new Error('Not allowed by CORS');
+    err.status = 403;
+    return callback(err);
   },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Trust reverse proxy (e.g. Render) before registering rate limiters
+if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
 
 // Rate limiting
 const limiter = rateLimit({
@@ -101,7 +108,13 @@ app.get('*', (req, res) => {
 
 // Global error handler
 const { logError } = require('./services/logger');
+const { validateJwtConfig } = require('./middleware/auth');
+const { close: closeDatabase } = require('./database/db');
+
 app.use((err, req, res, next) => {
+  if (err && err.status === 403) {
+    return res.status(403).json({ error: err.message || 'Not allowed by CORS' });
+  }
   logError(err, { method: req.method, path: req.path });
   res.status(500).json({
     error: 'Internal server error',
@@ -117,10 +130,49 @@ try {
 }
 
 if (require.main === module) {
-  app.listen(PORT, () => {
+  try {
+    validateJwtConfig();
+  } catch (err) {
+    console.error(`[startup] Configuration error: ${err.message}`);
+    process.exit(1);
+  }
+
+  const server = app.listen(PORT, () => {
     console.log(`Monday Attendance Tracker running on http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   });
+
+  let isShuttingDown = false;
+  function shutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[shutdown] Received ${signal}, closing HTTP server and database connections...`);
+
+    const forceTimer = setTimeout(() => {
+      console.error('[shutdown] Force exiting after 10s timeout');
+      process.exit(1);
+    }, 10000);
+    forceTimer.unref();
+
+    server.close(async (serverErr) => {
+      let exitCode = serverErr ? 1 : 0;
+      if (serverErr) {
+        console.error('[shutdown] HTTP server close error:', serverErr.message);
+      }
+      try {
+        await closeDatabase();
+      } catch (dbErr) {
+        console.error('[shutdown] Database close error:', dbErr.message);
+        exitCode = 1;
+      } finally {
+        clearTimeout(forceTimer);
+        process.exit(exitCode);
+      }
+    });
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;

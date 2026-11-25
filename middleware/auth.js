@@ -1,7 +1,36 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const DEV_FALLBACK_SECRET = 'dev-secret-change-in-production';
+const INSECURE_PLACEHOLDER_SECRETS = new Set([
+  DEV_FALLBACK_SECRET,
+  'change-this-to-a-secure-random-string-in-production'
+]);
+const JWT_SECRET = process.env.JWT_SECRET || DEV_FALLBACK_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+/**
+ * Validate JWT configuration for production startup.
+ * Fails fast without ever logging the secret value.
+ */
+function validateJwtConfig() {
+  if (process.env.NODE_ENV !== 'production') {
+    return;
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret || typeof secret !== 'string' || secret.trim() === '') {
+    throw new Error('JWT_SECRET environment variable is required when NODE_ENV=production');
+  }
+
+  const trimmed = secret.trim();
+  if (INSECURE_PLACEHOLDER_SECRETS.has(trimmed)) {
+    throw new Error('JWT_SECRET must not use a default or placeholder value in production');
+  }
+
+  if (trimmed.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters long in production');
+  }
+}
 
 /**
  * Generate JWT token for a user
@@ -38,4 +67,4 @@ function authenticate(req, res, next) {
   }
 }
 
-module.exports = { authenticate, generateToken };
+module.exports = { authenticate, generateToken, validateJwtConfig };
