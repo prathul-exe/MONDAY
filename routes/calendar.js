@@ -8,6 +8,10 @@ const engine = require('../services/attendance-engine');
 const router = express.Router();
 router.use(authenticate);
 
+function isValidIsoDateOnly(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 // GET /api/calendar - Get current academic calendar and holidays
 router.get('/', async (req, res) => {
   try {
@@ -24,8 +28,14 @@ router.get('/', async (req, res) => {
 // PUT /api/calendar - Create or update current semester dates
 router.put('/', [
   body('semester_name').trim().notEmpty().withMessage('Semester name is required'),
-  body('start_date').notEmpty().withMessage('Start date is required'),
-  body('end_date').notEmpty().withMessage('End date is required')
+  body('start_date')
+    .notEmpty().withMessage('Start date is required')
+    .custom(isValidIsoDateOnly).withMessage('Start date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true }).withMessage('Start date must be a valid date'),
+  body('end_date')
+    .notEmpty().withMessage('End date is required')
+    .custom(isValidIsoDateOnly).withMessage('End date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true }).withMessage('End date must be a valid date')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -33,6 +43,9 @@ router.put('/', [
 
     const db = getDatabase();
     const { semester_name, semester_number, start_date, end_date } = req.body;
+    if (end_date < start_date) {
+      return res.status(400).json({ error: 'End date must not be earlier than start date' });
+    }
     const existing = await db.get('SELECT id FROM academic_calendar WHERE user_id = ? AND is_current = 1', req.user.id);
 
     if (existing) {
@@ -58,8 +71,11 @@ router.put('/', [
 
 // POST /api/calendar/holidays
 router.post('/holidays', [
-  body('name').trim().notEmpty(),
-  body('date').notEmpty()
+  body('name').trim().notEmpty().withMessage('Holiday name is required'),
+  body('date')
+    .notEmpty().withMessage('Holiday date is required')
+    .custom(isValidIsoDateOnly).withMessage('Holiday date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true }).withMessage('Holiday date must be a valid date')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

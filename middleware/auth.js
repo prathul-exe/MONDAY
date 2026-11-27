@@ -41,7 +41,7 @@ function generateToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    { algorithm: 'HS256', expiresIn: JWT_EXPIRES_IN }
   );
 }
 
@@ -56,7 +56,7 @@ function authenticate(req, res, next) {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     req.user = decoded;
     next();
   } catch (err) {

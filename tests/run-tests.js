@@ -22,6 +22,21 @@ if (usePostgresTests) {
     console.error('ERROR: TEST_DATABASE_URL matches DATABASE_URL. Refusing to run tests against production.');
     process.exit(1);
   }
+  let parsedTestUrl;
+  try {
+    parsedTestUrl = new URL(testUrl);
+  } catch {
+    console.error('ERROR: TEST_DATABASE_URL is not a valid URL.');
+    process.exit(1);
+  }
+  const expectedProjectRef = 'ojnyrezxiodvjdvojjid';
+  const uriUser = decodeURIComponent(parsedTestUrl.username || '');
+  const isExpectedPooler = uriUser === `postgres.${expectedProjectRef}`;
+  const isExpectedDirect = parsedTestUrl.hostname === `db.${expectedProjectRef}.supabase.co` && uriUser === 'postgres';
+  if (!isExpectedPooler && !isExpectedDirect) {
+    console.error(`ERROR: TEST_DATABASE_URL does not match expected project reference (${expectedProjectRef}). Refusing to run.`);
+    process.exit(1);
+  }
   process.env.DB_CLIENT = 'postgres';
   process.env.DATABASE_URL = testUrl;
 } else {
@@ -32,9 +47,11 @@ if (usePostgresTests) {
 process.env.JWT_SECRET = 'test-secret-key';
 process.env.BCRYPT_ROUNDS = '4'; // Fast hashing for tests
 
+const jwt = require('jsonwebtoken');
 const { DatabaseSync } = require('node:sqlite');
 const engine = require('../services/attendance-engine');
 const app = require('../server');
+const { authenticate, generateToken } = require('../middleware/auth');
 const { close, getDatabase, getDbClient, isPostgres, emptyToNull } = require('../database/db');
 const { convertPlaceholders, transformSqlForPostgres } = require('../database/pg');
 const { TABLES, valuesMatch, findRowMismatches, verifyData, runMigration } = require('../scripts/migrate-sqlite-to-pg');
@@ -183,6 +200,30 @@ async function runAll() {
     assert.strictEqual(emptyToNull('09:00'), '09:00');
   });
 
+  test('JWT generation and verification enforce HS256 algorithm', () => {
+    const token = generateToken({ id: '11111111-1111-4111-8111-111111111111', email: 'hs256@example.com' });
+    const decoded = jwt.decode(token, { complete: true });
+    assert.strictEqual(decoded.header.alg, 'HS256');
+
+    const verifiedReq = { headers: { authorization: `Bearer ${token}` } };
+    let nextCalled = false;
+    authenticate(verifiedReq, { status: () => ({ json: () => {} }) }, () => { nextCalled = true; });
+    assert.strictEqual(nextCalled, true);
+    assert.strictEqual(verifiedReq.user.email, 'hs256@example.com');
+
+    // Reject alg=none unsigned token
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', email: 'hs256@example.com' })).toString('base64url');
+    const unsignedToken = `${header}.${payload}.`;
+    let rejectedStatus = 0;
+    authenticate(
+      { headers: { authorization: `Bearer ${unsignedToken}` } },
+      { status: (code) => ({ json: () => { rejectedStatus = code; } }) },
+      () => { throw new Error('Should not accept alg=none'); }
+    );
+    assert.strictEqual(rejectedStatus, 401);
+  });
+
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {
     assert.strictEqual(valuesMatch('2026-11-25 10:00:00', new Date('2026-11-25T10:00:00.000Z'), 'created_at', []), true);
     assert.strictEqual(valuesMatch(1, true, 'is_active', ['is_active']), true);
@@ -294,6 +335,31 @@ async function runAll() {
   let notifId = '';
 
   try {
+    await asyncTest('Database connection initializes and db.transaction rolls back on error', async () => {
+      const db = getDatabase();
+      assert.strictEqual(db.client, isPostgres() ? 'postgres' : 'sqlite');
+      if (isPostgres()) {
+        const row = await db.get('SELECT current_database() AS db_name');
+        assert.strictEqual(row.db_name, 'postgres');
+      }
+
+      const txUserId = '99999999-9999-4999-8999-999999999999';
+      const txEmail = `rollback-${runId}@example.com`;
+      await assert.rejects(
+        () => db.transaction(async (tx) => {
+          await tx.run(
+            'INSERT INTO users (id, email, password_hash, full_name) VALUES (?, ?, ?, ?)',
+            txUserId, txEmail, 'hash', 'Rollback Test'
+          );
+          throw new Error('Intentional rollback test');
+        }),
+        /Intentional rollback test/
+      );
+
+      const persisted = await db.get('SELECT id FROM users WHERE id = ?', txUserId);
+      assert.strictEqual(persisted, undefined);
+    });
+
     await asyncTest('GET /api/health and /api/v1/health return 200 ok', async () => {
       const res = await request(server, 'GET', '/api/health');
       assert.strictEqual(res.status, 200);
@@ -519,6 +585,12 @@ async function runAll() {
 
       const delRes = await request(server, 'DELETE', `/api/subjects/${subjectId}`, null, tokenB);
       assert.strictEqual(delRes.status, 404);
+
+      const ttPutB = await request(server, 'PUT', `/api/timetable/${slotId}`, { room: 'Hacked' }, tokenB);
+      assert.strictEqual(ttPutB.status, 404);
+
+      const ttDelB = await request(server, 'DELETE', `/api/timetable/${slotId}`, null, tokenB);
+      assert.strictEqual(ttDelB.status, 404);
     });
 
     await asyncTest('Academic calendar and holidays CRUD with ownership isolation', async () => {
@@ -567,6 +639,27 @@ async function runAll() {
 
       const getCalAAfter = await request(server, 'GET', '/api/calendar', null, tokenA);
       assert.strictEqual(getCalAAfter.body.holidays.length, 0);
+
+      // Input validation checks on calendar and holidays
+      const badCalDate = await request(server, 'PUT', '/api/calendar', {
+        semester_name: 'Bad Dates',
+        start_date: '2026-02-30',
+        end_date: '2026-12-01'
+      }, tokenA);
+      assert.strictEqual(badCalDate.status, 400);
+
+      const badCalOrder = await request(server, 'PUT', '/api/calendar', {
+        semester_name: 'Reversed Dates',
+        start_date: '2026-12-15',
+        end_date: '2026-08-15'
+      }, tokenA);
+      assert.strictEqual(badCalOrder.status, 400);
+
+      const badHolDate = await request(server, 'POST', '/api/calendar/holidays', {
+        name: 'Invalid Holiday',
+        date: 'not-a-date'
+      }, tokenA);
+      assert.strictEqual(badHolDate.status, 400);
     });
 
     await asyncTest('Notifications generation, deduplication, read state and isolation', async () => {
@@ -618,6 +711,19 @@ async function runAll() {
       assert.strictEqual(putSet.body.critical_shortage_alert, isPostgres() ? false : 0);
       assert.strictEqual(putSet.body.morning_rundown, isPostgres() ? true : 1);
       assert.strictEqual(putSet.body.notification_enabled, isPostgres() ? false : 0);
+
+      // Input validation checks on settings
+      const badTheme = await request(server, 'PUT', '/api/settings', { theme: 'neon' }, tokenA);
+      assert.strictEqual(badTheme.status, 400);
+
+      const lowThresh = await request(server, 'PUT', '/api/settings', { min_attendance_threshold: -5 }, tokenA);
+      assert.strictEqual(lowThresh.status, 400);
+
+      const highThresh = await request(server, 'PUT', '/api/settings', { min_attendance_threshold: 105 }, tokenA);
+      assert.strictEqual(highThresh.status, 400);
+
+      const highWarn = await request(server, 'PUT', '/api/settings', { warning_threshold: 120 }, tokenA);
+      assert.strictEqual(highWarn.status, 400);
 
       // Create subject + attendance for User B to ensure User A reset does not touch User B
       const subB = await request(server, 'POST', '/api/subjects', {

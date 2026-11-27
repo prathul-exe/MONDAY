@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: monday-attendance-tracker
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_CLIENT
+        value: postgres
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false

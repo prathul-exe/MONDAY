@@ -1,4 +1,5 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, isPostgres, isUniqueConstraintError } = require('../database/db');
 const { authenticate } = require('../middleware/auth');
@@ -38,8 +39,23 @@ router.get('/', async (req, res) => {
 });
 
 // PUT /api/settings
-router.put('/', async (req, res) => {
+router.put('/', [
+  body('min_attendance_threshold')
+    .optional({ values: 'null' })
+    .isFloat({ min: 0, max: 100 }).withMessage('Minimum attendance threshold must be between 0 and 100'),
+  body('warning_threshold')
+    .optional({ values: 'null' })
+    .isFloat({ min: 0, max: 100 }).withMessage('Warning threshold must be between 0 and 100'),
+  body('theme')
+    .optional({ values: 'null' })
+    .isIn(['light', 'dark']).withMessage('Theme must be light or dark')
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array()[0].msg });
+    }
+
     const db = getDatabase();
     await ensureSettings(db, req.user.id);
 
