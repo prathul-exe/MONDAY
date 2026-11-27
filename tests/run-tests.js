@@ -2,6 +2,7 @@ const assert = require('assert');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 // Load .env first so configured DATABASE_URL is visible to the safety guard.
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
@@ -222,6 +223,71 @@ async function runAll() {
       () => { throw new Error('Should not accept alg=none'); }
     );
     assert.strictEqual(rejectedStatus, 401);
+  });
+
+  await asyncTest('Frontend API.request preserves auth 401 errors and expires session only on protected endpoints', async () => {
+    const apiSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'services', 'api.js'), 'utf8');
+    let nextResponse = null;
+    let reloaded = false;
+    let removedCount = 0;
+    const store = new Map([['monday_token', 'existing-token']]);
+
+    const sandbox = {
+      fetch: async () => nextResponse,
+      localStorage: {
+        getItem: (k) => store.get(k) || null,
+        removeItem: (k) => { store.delete(k); }
+      },
+      TokenStorage: {
+        getSync: () => store.get('monday_token') || null,
+        remove: async () => { removedCount++; store.delete('monday_token'); }
+      },
+      window: {
+        location: {
+          reload: () => { reloaded = true; }
+        }
+      },
+      AppConfig: {
+        APP_VERSION: '1.0.0',
+        isNative: () => false,
+        getApiBaseUrl: () => '/api/v1'
+      }
+    };
+
+    vm.runInNewContext(`${apiSource}\nthis.API = API;`, sandbox);
+    const { API } = sandbox;
+
+    // 1. /auth/login 401 must surface backend error without clearing token or reloading
+    nextResponse = {
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'Invalid email or password' })
+    };
+    await assert.rejects(() => API.post('/auth/login', { email: 'a@b.com', password: 'bad' }), /Invalid email or password/);
+    assert.strictEqual(reloaded, false);
+    assert.strictEqual(removedCount, 0);
+    assert.strictEqual(store.get('monday_token'), 'existing-token');
+
+    // 2. /auth/register 401/409 must not trigger Session expired
+    nextResponse = {
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'Registration not allowed' })
+    };
+    await assert.rejects(() => API.post('/auth/register', { email: 'a@b.com' }), /Registration not allowed/);
+    assert.strictEqual(reloaded, false);
+    assert.strictEqual(removedCount, 0);
+
+    // 3. Protected endpoint 401 must clear token, reload, and throw Session expired
+    nextResponse = {
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'Authentication required' })
+    };
+    await assert.rejects(() => API.get('/subjects'), /Session expired/);
+    assert.strictEqual(reloaded, true);
+    assert.strictEqual(removedCount, 1);
+    assert.strictEqual(store.has('monday_token'), false);
   });
 
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {

@@ -18,6 +18,16 @@ const API = {
     },
 
     async request(method, endpoint, data = null) {
+        const baseUrl = this.baseUrl;
+        if (
+            typeof AppConfig !== 'undefined' &&
+            AppConfig.isNative() &&
+            baseUrl === AppConfig.PRODUCTION_API_URL.replace(/\/+$/, '') &&
+            !AppConfig.isProductionConfigured()
+        ) {
+            throw new Error('Backend API URL is not configured. Deploy the backend and set AppConfig.PRODUCTION_API_URL to your HTTPS URL.');
+        }
+
         const config = {
             method,
             headers: this.getHeaders(),
@@ -26,19 +36,27 @@ const API = {
             config.body = JSON.stringify(data);
         }
 
-        const response = await fetch(`${this.baseUrl}${endpoint}`, config);
+        let response;
+        try {
+            response = await fetch(`${baseUrl}${endpoint}`, config);
+        } catch (err) {
+            throw new Error('Unable to reach the server. Check your internet connection and backend API URL.');
+        }
 
-        if (response.status === 401) {
+        const isAuthEndpoint = endpoint === '/auth/login' || endpoint === '/auth/register' ||
+            endpoint.startsWith('/auth/login?') || endpoint.startsWith('/auth/register?');
+
+        if (response.status === 401 && !isAuthEndpoint) {
             if (typeof TokenStorage !== 'undefined') await TokenStorage.remove();
             else localStorage.removeItem('monday_token');
             window.location.reload();
             throw new Error('Session expired');
         }
 
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error(result.error || result.message || 'Request failed');
+            throw new Error(result.error || result.message || `Request failed (${response.status})`);
         }
 
         return result;
