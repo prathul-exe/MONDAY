@@ -1064,6 +1064,13 @@ async function runAll() {
 
   await asyncTest('TimetableComponent separates Edit/Delete actions, validates time range, and preserves entries on failure', async () => {
     const ttSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'timetable.js'), 'utf8');
+    const helpersSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'utils', 'helpers.js'), 'utf8');
+    const helpersSandbox = { document: { createElement: () => ({}), getElementById: () => null, body: { appendChild: () => {} } }, window: {} };
+    vm.runInNewContext(`${helpersSource}\nthis.Helpers = Helpers;`, helpersSandbox);
+    const realFormatTime = helpersSandbox.Helpers.formatTime.bind(helpersSandbox.Helpers);
+    assert.strictEqual(realFormatTime('00:00'), '12:00 AM');
+    assert.strictEqual(realFormatTime('12:00'), '12:00 PM');
+    assert.strictEqual(realFormatTime('15:05'), '3:05 PM');
     const makeClassList = (initial = []) => {
       const s = new Set(initial);
       return {
@@ -1132,7 +1139,7 @@ async function runAll() {
         escapeHtml: (v) => String(v ?? ''),
         loadingSpinner: () => '',
         dayNameShort: (d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d],
-        formatTime: (t) => t,
+        formatTime: realFormatTime,
         confirm: async () => true,
         showToast: (msg, type = 'success') => toasts.push({ msg, type })
       },
@@ -1152,7 +1159,8 @@ async function runAll() {
     const { TimetableComponent } = sandbox;
     TimetableComponent.entries = [
       { id: 'slot-1', subject_id: 'sub-1', subject_code: 'CS101', subject_name: 'Algorithms', day_of_week: 1, start_time: '09:00', end_time: '10:30', session_type: 'lecture', room: 'LH-1' },
-      { id: 'slot-sun', subject_id: 'sub-1', subject_code: 'CS101', subject_name: 'Algorithms', day_of_week: 0, start_time: '14:00', end_time: '15:00', session_type: 'lecture', room: 'Sun-Room' }
+      { id: 'slot-break', subject_id: null, day_of_week: 1, start_time: '12:00', end_time: '12:45', session_type: 'lunch', room: 'Cafeteria' },
+      { id: 'slot-sun', subject_id: 'sub-1', subject_code: 'CS101', subject_name: 'Algorithms', day_of_week: 0, start_time: '15:05', end_time: '16:00', session_type: 'lecture', room: 'Sun-Room' }
     ];
     TimetableComponent.subjects = [{ id: 'sub-1', code: 'CS101', name: 'Algorithms' }];
     TimetableComponent.loadData = async () => {};
@@ -1161,14 +1169,19 @@ async function runAll() {
 
     assert(container.innerHTML.includes('>Sun<'));
     assert(container.innerHTML.includes('Sun-Room'));
-    assert.strictEqual(editButtons.length, 2);
-    assert.strictEqual(delButtons.length, 2);
+    assert(container.innerHTML.includes('9:00 AM – 10:30 AM'));
+    assert(container.innerHTML.includes('12:00 PM – 12:45 PM • Cafeteria'));
+    assert(container.innerHTML.includes('3:05 PM – 4:00 PM'));
+    assert.strictEqual(editButtons.length, 3);
+    assert.strictEqual(delButtons.length, 3);
 
-    // Clicking Edit on Sunday opens modal populated with Sunday entry and never triggers Delete
-    editButtons[1].click();
+    // Clicking Edit on Sunday opens modal populated with 24h HH:mm input values and never triggers Delete
+    editButtons[2].click();
     assert.strictEqual(requests.length, 0);
     assert.strictEqual(TimetableComponent.editingSlotId, 'slot-sun');
     assert.strictEqual(elements['slot-day'].value, '0');
+    assert.strictEqual(elements['slot-start'].value, '15:05');
+    assert.strictEqual(elements['slot-end'].value, '16:00');
     assert.strictEqual(elements['slot-room'].value, 'Sun-Room');
 
     // Clicking Edit on Monday opens modal populated with Monday entry and never triggers Delete
@@ -1192,15 +1205,17 @@ async function runAll() {
     assert.strictEqual(requests.length, 1);
     assert.strictEqual(requests[0].method, 'PUT');
     assert.strictEqual(requests[0].url, '/timetable/slot-1');
+    assert.strictEqual(requests[0].body.start_time, '10:00');
+    assert.strictEqual(requests[0].body.end_time, '11:30');
     assert.strictEqual(requests[0].body.room, 'LH-2');
 
     // Failed deletion does not remove entry from TimetableComponent.entries
-    await delButtons[1].click();
+    await delButtons[2].click();
     assert.strictEqual(requests.length, 2);
     assert.strictEqual(requests[1].method, 'DELETE');
     assert.strictEqual(requests[1].url, '/timetable/slot-sun');
-    assert.strictEqual(TimetableComponent.entries.length, 2);
-    assert.strictEqual(delButtons[1].disabled, false);
+    assert.strictEqual(TimetableComponent.entries.length, 3);
+    assert.strictEqual(delButtons[2].disabled, false);
   });
 
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {

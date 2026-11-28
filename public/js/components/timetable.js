@@ -180,7 +180,7 @@ const TimetableComponent = {
                               </div>
                             </div>
                             <div class="font-headline-sm text-[11px] font-semibold text-on-surface mt-0.5 leading-tight truncate">${isLunch ? 'Lunch Break' : 'Break / Recess'}</div>
-                            <div class="text-[10px] text-on-surface-variant truncate mt-0.5">${Helpers.escapeHtml(match.room || Helpers.formatTime(match.end_time))}</div>
+                            <div class="text-[10px] text-on-surface-variant truncate mt-0.5">${Helpers.formatTime(match.start_time)} – ${Helpers.formatTime(match.end_time)}${match.room ? ` • ${Helpers.escapeHtml(match.room)}` : ''}</div>
                           </div>
                         </td>
                       `;
@@ -201,7 +201,8 @@ const TimetableComponent = {
                             </div>
                           </div>
                           <div class="font-headline-sm text-[11px] font-semibold text-on-surface mt-0.5 leading-tight truncate">${Helpers.escapeHtml(match.subject_name)}</div>
-                          <div class="text-[10px] text-on-surface-variant truncate mt-0.5">${Helpers.escapeHtml(match.room || match.session_type)}</div>
+                          <div class="text-[10px] text-on-surface-variant truncate mt-0.5">${Helpers.formatTime(match.start_time)} – ${Helpers.formatTime(match.end_time)}</div>
+                          <div class="text-[10px] text-on-surface-variant truncate">${Helpers.escapeHtml(match.room || match.session_type)}</div>
                         </div>
                       </td>
                     `;
