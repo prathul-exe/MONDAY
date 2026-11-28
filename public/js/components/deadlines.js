@@ -3,7 +3,6 @@ const DeadlinesComponent = {
   subjects: [],
   selectedCourseId: '',
   selectedCategory: 'assignment',
-  selectedPlatform: 'Moodle Portal',
   editingDeadlineId: null,
   editingOriginalCategory: null,
   isSubmitting: false,
@@ -91,16 +90,6 @@ const DeadlinesComponent = {
                 <label class="font-label-tag text-label-tag text-on-surface-variant uppercase block mb-1">Due Time</label>
                 <input id="dl-time" type="time" value="23:59" class="w-full rounded-lg bg-surface-container-low p-2.5 text-on-surface focus:outline-none">
               </div>
-            </div>
-
-            <div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
-              <span class="font-label-tag text-label-tag text-on-surface-variant uppercase block">Platform</span>
-              <select id="dl-platform" class="w-full bg-transparent font-label-code text-sm text-on-surface focus:outline-none mt-0.5">
-                <option value="Moodle Portal">Moodle Portal</option>
-                <option value="Canvas LMS">Canvas LMS</option>
-                <option value="Direct PDF Upload">Direct PDF Upload</option>
-                <option value="In-Person / Hall">In-Person / Hall</option>
-              </select>
             </div>
 
             <button type="submit" id="dl-submit-btn" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-code font-semibold tracking-wide uppercase flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-all">
@@ -269,8 +258,7 @@ const DeadlinesComponent = {
             <span>${Helpers.formatDateShort(d.due_date)} • ${Helpers.formatTime(d.due_time)}</span>
           </p>
         </div>
-        <div class="border-t border-surface-container-high pt-2.5 flex items-center justify-between gap-2">
-          <span class="font-label-code text-xs text-on-surface-variant truncate">${Helpers.escapeHtml(d.platform || 'Local Task')}</span>
+        <div class="border-t border-surface-container-high pt-2.5 flex items-center justify-end gap-2">
           <button data-dl-id="${d.id}" data-done="${isDone ? '1' : '0'}" class="toggle-dl-btn shrink-0 px-3 py-1.5 rounded-full ${isDone ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container-highest text-on-surface'} font-label-tag text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all">
             <span class="material-symbols-outlined text-[16px]">check_circle</span>
             <span>${isDone ? 'Completed' : 'Mark Complete'}</span>
@@ -318,7 +306,6 @@ const DeadlinesComponent = {
         document.getElementById('dl-subject').value = existing.subject_id || '';
         document.getElementById('dl-date').value = existing.due_date || new Date().toISOString().split('T')[0];
         document.getElementById('dl-time').value = existing.due_time || '23:59';
-        document.getElementById('dl-platform').value = existing.platform || 'Moodle Portal';
         this.setCategory(this.editingOriginalCategory, this.editingOriginalCategory === 'custom' ? (existing.description || '') : '');
       } else {
         this.editingDeadlineId = null;
@@ -380,8 +367,7 @@ const DeadlinesComponent = {
         subject_id: document.getElementById('dl-subject').value || null,
         category: this.selectedCategory,
         due_date: document.getElementById('dl-date').value,
-        due_time: document.getElementById('dl-time').value || '23:59',
-        platform: document.getElementById('dl-platform').value
+        due_time: document.getElementById('dl-time').value || '23:59'
       };
       if (this.selectedCategory === 'custom') {
         payload.description = customName;

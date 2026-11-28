@@ -521,7 +521,6 @@ async function runAll() {
       'dl-subject': { value: '' },
       'dl-date': { value: '2026-12-01' },
       'dl-time': { value: '23:59' },
-      'dl-platform': { value: 'Moodle Portal' },
       'dl-custom-name-wrap': { classList: makeClassList(['hidden']) },
       'dl-custom-name': { value: '', focus: () => {} },
       'dl-create-form': {
@@ -562,10 +561,13 @@ async function runAll() {
     const { DeadlinesComponent } = sandbox;
     DeadlinesComponent.loadData = async () => {};
 
-    // 7. Grade percentage UI removed from modal and cards
+    // 7. Grade percentage and Platform UI removed from modal and cards
     const renderedModal = DeadlinesComponent.render();
     assert.strictEqual(renderedModal.includes('dl-weight'), false);
     assert.strictEqual(renderedModal.includes('Grade %'), false);
+    assert.strictEqual(renderedModal.includes('dl-platform'), false);
+    assert.strictEqual(renderedModal.includes('Moodle Portal'), false);
+    assert.strictEqual(renderedModal.includes('Platform'), false);
     const cardHtml = DeadlinesComponent.renderCard({
       id: 'dl-card-1',
       title: 'Seminar Talk',
@@ -578,6 +580,8 @@ async function runAll() {
     }, false);
     assert(cardHtml.includes('Viva'));
     assert.strictEqual(cardHtml.includes('25% Weight'), false);
+    assert.strictEqual(cardHtml.includes('In-Person / Hall'), false);
+    assert.strictEqual(cardHtml.includes('Local Task'), false);
 
     // 2. Duplicate rendering prevention
     DeadlinesComponent.deadlines = [
@@ -606,6 +610,7 @@ async function runAll() {
     assert.strictEqual(requests[0].body.category, 'custom');
     assert.strictEqual(requests[0].body.description, 'Viva');
     assert.strictEqual('grade_weight' in requests[0].body, false);
+    assert.strictEqual('platform' in requests[0].body, false);
     assert.strictEqual(elements['dl-submit-btn'].disabled, true);
     resolvePending({ id: 'dl-1' });
     await firstSubmit;
@@ -620,8 +625,7 @@ async function runAll() {
       category: 'custom',
       description: 'Viva',
       due_date: '2026-12-01',
-      due_time: '14:00',
-      platform: 'In-Person / Hall'
+      due_time: '14:00'
     });
     assert.strictEqual(elements['dl-custom-name-wrap'].classList.contains('hidden'), false);
     assert.strictEqual(elements['dl-custom-name'].value, 'Viva');
@@ -630,6 +634,7 @@ async function runAll() {
     assert.strictEqual(requests[1].method, 'PUT');
     assert.strictEqual(requests[1].url, '/deadlines/dl-1');
     assert.strictEqual(requests[1].body.description, 'Thesis Viva');
+    assert.strictEqual('platform' in requests[1].body, false);
 
     // 5b. Editing a predefined task omits description so existing DB description is preserved
     DeadlinesComponent.openModal({
@@ -639,8 +644,7 @@ async function runAll() {
       category: 'assignment',
       description: 'Chapters 1-4',
       due_date: '2026-12-03',
-      due_time: '18:00',
-      platform: 'Moodle Portal'
+      due_time: '18:00'
     });
     elements['dl-title'].value = 'Midterm Study Revised';
     await elements['dl-create-form'].listeners.submit(submitEvt);
@@ -656,8 +660,7 @@ async function runAll() {
       category: 'custom',
       description: 'Viva',
       due_date: '2026-12-04',
-      due_time: '12:00',
-      platform: 'In-Person / Hall'
+      due_time: '12:00'
     });
     catButtons[0].click(); // switch from custom -> assignment
     await elements['dl-create-form'].listeners.submit(submitEvt);

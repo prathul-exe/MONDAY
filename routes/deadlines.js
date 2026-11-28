@@ -53,7 +53,7 @@ router.post('/', [
     const id = uuidv4();
     const {
       title, description, subject_id, category,
-      due_date, due_time, platform, reminder_before
+      due_date, due_time, reminder_before
     } = req.body;
 
     const normalizedCategory = category || 'assignment';
@@ -90,12 +90,12 @@ router.post('/', [
     }
 
     await db.run(`
-      INSERT INTO deadlines (id, user_id, subject_id, title, description, category, due_date, due_time, platform, reminder_before)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO deadlines (id, user_id, subject_id, title, description, category, due_date, due_time, reminder_before)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       id, req.user.id, subject_id || null, title, normalizedDescription,
       normalizedCategory, due_date, normalizedDueTime,
-      platform || null, reminder_before || null
+      reminder_before || null
     );
 
     const created = await db.get(`
@@ -119,7 +119,7 @@ router.put('/:id', async (req, res) => {
     const existing = await db.get('SELECT * FROM deadlines WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
     if (!existing) return res.status(404).json({ error: 'Deadline not found' });
 
-    const { title, description, subject_id, category, due_date, due_time, platform, reminder_before } = req.body;
+    const { title, description, subject_id, category, due_date, due_time, reminder_before } = req.body;
 
     const nextCategory = category !== undefined ? category : existing.category;
     const nextDescription = description !== undefined ? (description ? String(description).trim() : null) : existing.description;
@@ -140,11 +140,10 @@ router.put('/:id', async (req, res) => {
         category = COALESCE(?, category),
         due_date = COALESCE(?, due_date),
         due_time = COALESCE(?, due_time),
-        platform = COALESCE(?, platform),
         reminder_before = COALESCE(?, reminder_before),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?
-    `, title, nextDescription, subject_id, category, emptyToNull(due_date), emptyToNull(due_time), platform, reminder_before, req.params.id, req.user.id);
+    `, title, nextDescription, subject_id, category, emptyToNull(due_date), emptyToNull(due_time), reminder_before, req.params.id, req.user.id);
 
     const updated = await db.get(`
       SELECT d.*, s.name as subject_name, s.code as subject_code
