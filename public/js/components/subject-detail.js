@@ -4,6 +4,7 @@ const SubjectDetailComponent = {
   projection: null,
   filter: 'all', // 'all' | 'present' | 'absent' | 'excused'
   subjectId: null,
+  isSubmittingAttendance: false,
 
   render(subjectId) {
     this.subjectId = subjectId;
@@ -378,6 +379,14 @@ const SubjectDetailComponent = {
   },
 
   async quickMark(status) {
+    if (this.isSubmittingAttendance) return;
+
+    const presentBtn = document.getElementById('sd-mark-present');
+    const absentBtn = document.getElementById('sd-mark-absent');
+    this.isSubmittingAttendance = true;
+    if (presentBtn) presentBtn.disabled = true;
+    if (absentBtn) absentBtn.disabled = true;
+
     try {
       const today = new Date().toISOString().split('T')[0];
       const nowTime = new Date().toTimeString().slice(0, 8);
@@ -391,7 +400,11 @@ const SubjectDetailComponent = {
       Helpers.showToast(status === 'present' ? 'Marked Attended' : 'Marked Missed');
       await this.loadData();
     } catch (err) {
-      Helpers.showToast(err.message, 'error');
+      Helpers.showToast(err.message || 'Could not record attendance', 'error');
+    } finally {
+      this.isSubmittingAttendance = false;
+      if (presentBtn) presentBtn.disabled = false;
+      if (absentBtn) absentBtn.disabled = false;
     }
   },
 
@@ -445,6 +458,12 @@ const SubjectDetailComponent = {
 
     document.getElementById('att-entry-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (this.isSubmittingAttendance) return;
+
+      const saveBtn = document.getElementById('att-modal-save');
+      this.isSubmittingAttendance = true;
+      if (saveBtn) saveBtn.disabled = true;
+
       const editId = document.getElementById('att-edit-id').value;
       const payload = {
         subject_id: this.subjectId,
@@ -465,7 +484,10 @@ const SubjectDetailComponent = {
         closeAtt();
         await this.loadData();
       } catch (err) {
-        Helpers.showToast(err.message, 'error');
+        Helpers.showToast(err.message || 'Could not save attendance', 'error');
+      } finally {
+        this.isSubmittingAttendance = false;
+        if (saveBtn) saveBtn.disabled = false;
       }
     });
 

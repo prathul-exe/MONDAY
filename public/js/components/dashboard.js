@@ -1,6 +1,8 @@
 const DashboardComponent = {
   data: null,
   searchQuery: '',
+  isSubmittingSubject: false,
+  isMarkingAttendance: false,
 
   render() {
     const user = App.currentUser || {};
@@ -209,9 +211,12 @@ const DashboardComponent = {
     if (!container || !this.data) return;
 
     const query = this.searchQuery.toLowerCase().trim();
-    const subjects = (this.data.subjects || []).filter(s =>
-      !query || s.name.toLowerCase().includes(query) || s.code.toLowerCase().includes(query) || (s.faculty_name || '').toLowerCase().includes(query)
-    );
+    const seenIds = new Set();
+    const subjects = (this.data.subjects || []).filter(s => {
+      if (!s || !s.id || seenIds.has(s.id)) return false;
+      seenIds.add(s.id);
+      return !query || s.name.toLowerCase().includes(query) || s.code.toLowerCase().includes(query) || (s.faculty_name || '').toLowerCase().includes(query);
+    });
 
     if (subjects.length === 0) {
       container.innerHTML = `
@@ -298,9 +303,14 @@ const DashboardComponent = {
     container.querySelectorAll('.quick-mark-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (this.isMarkingAttendance) return;
+
         const subjectId = btn.dataset.subjectId;
         const status = btn.dataset.quickMark;
-        btn.disabled = true;
+        const markButtons = container.querySelectorAll('.quick-mark-btn');
+        this.isMarkingAttendance = true;
+        markButtons.forEach(b => { b.disabled = true; });
+
         try {
           const today = new Date().toISOString().split('T')[0];
           const nowTime = new Date().toTimeString().slice(0, 8);
@@ -315,7 +325,9 @@ const DashboardComponent = {
           await this.loadDashboard();
         } catch (err) {
           Helpers.showToast(err.message || 'Could not record attendance', 'error');
-          btn.disabled = false;
+        } finally {
+          this.isMarkingAttendance = false;
+          markButtons.forEach(b => { b.disabled = false; });
         }
       });
     });
@@ -347,6 +359,8 @@ const DashboardComponent = {
 
     document.getElementById('add-subject-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (this.isSubmittingSubject) return;
+      this.isSubmittingSubject = true;
       const saveBtn = document.getElementById('save-subject-btn');
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving...';
@@ -367,6 +381,7 @@ const DashboardComponent = {
       } catch (err) {
         Helpers.showToast(err.message || 'Failed to add subject', 'error');
       } finally {
+        this.isSubmittingSubject = false;
         saveBtn.disabled = false;
         saveBtn.textContent = 'Add Subject';
       }

@@ -1,8 +1,11 @@
 const Router = {
     routes: {},
     currentRoute: null,
+    _initialized: false,
 
     init() {
+        if (this._initialized) return;
+        this._initialized = true;
         window.addEventListener('hashchange', () => this.handleRoute());
         // Also handle popstate for back/forward
         window.addEventListener('popstate', () => this.handleRoute());

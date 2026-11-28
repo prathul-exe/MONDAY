@@ -75,6 +75,15 @@ router.post('/', [
     const id = uuidv4();
     const { name, code, faculty_name, credits, frequency_per_week, room, required_attendance, color } = req.body;
 
+    const existing = await db.get(`
+      SELECT id FROM subjects
+      WHERE user_id = ? AND is_active = 1
+        AND (LOWER(TRIM(code)) = LOWER(TRIM(?)) OR LOWER(TRIM(name)) = LOWER(TRIM(?)))
+    `, req.user.id, code, name);
+    if (existing) {
+      return res.status(409).json({ error: 'A subject with this name or code already exists' });
+    }
+
     await db.run(`
       INSERT INTO subjects (id, user_id, name, code, faculty_name, credits, frequency_per_week, room, required_attendance, color)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -118,6 +127,17 @@ router.put('/:id', async (req, res) => {
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
 
     const { name, code, faculty_name, credits, frequency_per_week, room, required_attendance, color } = req.body;
+
+    const nextName = name !== undefined ? name : subject.name;
+    const nextCode = code !== undefined ? code : subject.code;
+    const duplicate = await db.get(`
+      SELECT id FROM subjects
+      WHERE user_id = ? AND is_active = 1 AND id != ?
+        AND (LOWER(TRIM(code)) = LOWER(TRIM(?)) OR LOWER(TRIM(name)) = LOWER(TRIM(?)))
+    `, req.user.id, req.params.id, nextCode, nextName);
+    if (duplicate) {
+      return res.status(409).json({ error: 'A subject with this name or code already exists' });
+    }
 
     await db.run(`
       UPDATE subjects SET

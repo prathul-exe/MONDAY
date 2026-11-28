@@ -290,6 +290,207 @@ async function runAll() {
     assert.strictEqual(store.has('monday_token'), false);
   });
 
+  test('DashboardComponent.renderSubjects does not duplicate cards across repeated renders', () => {
+    const dashSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'dashboard.js'), 'utf8');
+    const container = { innerHTML: '', querySelectorAll: () => [] };
+    const sandbox = {
+      document: {
+        getElementById: (id) => (id === 'subjects-list-container' ? container : null)
+      },
+      App: { currentUser: { full_name: 'Maya', semester: 4 } },
+      NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      Helpers: {
+        escapeHtml: (v) => String(v ?? ''),
+        loadingSpinner: () => '',
+        getGreeting: () => 'Hello'
+      },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB' })
+      },
+      Router: { navigate: () => {} },
+      API: {}
+    };
+    vm.runInNewContext(`${dashSource}\nthis.DashboardComponent = DashboardComponent;`, sandbox);
+    const { DashboardComponent } = sandbox;
+    DashboardComponent.data = {
+      subjects: [
+        { id: 'sub-1', name: 'Data Science', code: 'DS301', total: 0, attended: 0, percentage: 0, required_attendance: 75, classes_needed: 0, classes_can_miss: 0 },
+        { id: 'sub-1', name: 'Data Science', code: 'DS301', total: 0, attended: 0, percentage: 0, required_attendance: 75, classes_needed: 0, classes_can_miss: 0 }
+      ]
+    };
+    DashboardComponent.renderSubjects();
+    DashboardComponent.renderSubjects();
+    const matches = container.innerHTML.match(/class="subject-card /g) || [];
+    assert.strictEqual(matches.length, 1);
+  });
+
+  await asyncTest('DashboardComponent quick-mark lock prevents duplicate rapid submissions and recovers after error', async () => {
+    const dashSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'dashboard.js'), 'utf8');
+    const createBtn = (quickMark) => {
+      const listeners = {};
+      return {
+        dataset: { subjectId: 'sub-1', quickMark },
+        disabled: false,
+        addEventListener(evt, fn) { listeners[evt] = fn; },
+        click() { return listeners.click?.({ stopPropagation: () => {} }); }
+      };
+    };
+    const presentBtn = createBtn('present');
+    const absentBtn = createBtn('absent');
+    const container = {
+      innerHTML: '',
+      querySelectorAll: (sel) => {
+        if (sel === '.quick-mark-btn') return [presentBtn, absentBtn];
+        return [];
+      }
+    };
+    const toasts = [];
+    let postCalls = 0;
+    let rejectPending;
+    let resolvePending;
+    let shouldFail = true;
+
+    const sandbox = {
+      document: {
+        getElementById: (id) => (id === 'subjects-list-container' ? container : null)
+      },
+      App: { currentUser: { full_name: 'Maya', semester: 4 } },
+      NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      Helpers: {
+        escapeHtml: (v) => String(v ?? ''),
+        loadingSpinner: () => '',
+        getGreeting: () => 'Hello',
+        showToast: (msg, type = 'success') => toasts.push({ msg, type })
+      },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB' })
+      },
+      Router: { navigate: () => {} },
+      API: {
+        post: () => {
+          postCalls += 1;
+          return new Promise((resolve, reject) => {
+            if (shouldFail) rejectPending = reject;
+            else resolvePending = resolve;
+          });
+        }
+      }
+    };
+    vm.runInNewContext(`${dashSource}\nthis.DashboardComponent = DashboardComponent;`, sandbox);
+    const { DashboardComponent } = sandbox;
+    DashboardComponent.loadDashboard = async () => {};
+    DashboardComponent.data = {
+      subjects: [
+        { id: 'sub-1', name: 'Data Science', code: 'DS301', total: 0, attended: 0, percentage: 0, required_attendance: 75, classes_needed: 0, classes_can_miss: 0 }
+      ]
+    };
+    DashboardComponent.renderSubjects();
+
+    const firstClick = presentBtn.click();
+    const secondClick = absentBtn.click();
+    await secondClick;
+
+    assert.strictEqual(postCalls, 1);
+    assert.strictEqual(DashboardComponent.isMarkingAttendance, true);
+    assert.strictEqual(presentBtn.disabled, true);
+    assert.strictEqual(absentBtn.disabled, true);
+
+    rejectPending(new Error('Network error'));
+    await firstClick;
+
+    assert.strictEqual(DashboardComponent.isMarkingAttendance, false);
+    assert.strictEqual(presentBtn.disabled, false);
+    assert.strictEqual(absentBtn.disabled, false);
+    assert(toasts.some((t) => t.type === 'error' && t.msg.includes('Network error')));
+
+    shouldFail = false;
+    const retryClick = presentBtn.click();
+    assert.strictEqual(postCalls, 2);
+    resolvePending({ ok: true });
+    await retryClick;
+    assert.strictEqual(DashboardComponent.isMarkingAttendance, false);
+    assert.strictEqual(presentBtn.disabled, false);
+  });
+
+  await asyncTest('SubjectDetailComponent attendance locks prevent rapid duplicate requests and recover after error', async () => {
+    const detailSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'subject-detail.js'), 'utf8');
+    const elements = {
+      'sd-mark-present': { disabled: false },
+      'sd-mark-absent': { disabled: false },
+      'att-modal-save': { disabled: false },
+      'att-edit-id': { value: '' },
+      'att-date': { value: '2026-11-28' },
+      'att-time': { value: '10:00' },
+      'att-session-type': { value: 'lecture' },
+      'att-notes': { value: '' },
+      'attendance-modal': { classList: { add: () => {}, remove: () => {} } },
+      'att-entry-form': {
+        listeners: {},
+        addEventListener(evt, fn) { this.listeners[evt] = fn; }
+      }
+    };
+    const toasts = [];
+    let postCalls = 0;
+    let rejectPending;
+    let resolvePending;
+    let shouldFail = true;
+
+    const sandbox = {
+      document: {
+        getElementById: (id) => elements[id] || null,
+        querySelectorAll: () => []
+      },
+      NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      Helpers: {
+        escapeHtml: (v) => String(v ?? ''),
+        loadingSpinner: () => '',
+        showToast: (msg, type = 'success') => toasts.push({ msg, type })
+      },
+      API: {
+        post: () => {
+          postCalls += 1;
+          return new Promise((resolve, reject) => {
+            if (shouldFail) rejectPending = reject;
+            else resolvePending = resolve;
+          });
+        }
+      }
+    };
+    vm.runInNewContext(`${detailSource}\nthis.SubjectDetailComponent = SubjectDetailComponent;`, sandbox);
+    const { SubjectDetailComponent } = sandbox;
+    SubjectDetailComponent.subjectId = 'sub-1';
+    SubjectDetailComponent.loadData = async () => {};
+
+    const firstQuick = SubjectDetailComponent.quickMark('present');
+    await SubjectDetailComponent.quickMark('absent');
+
+    assert.strictEqual(postCalls, 1);
+    assert.strictEqual(SubjectDetailComponent.isSubmittingAttendance, true);
+    assert.strictEqual(elements['sd-mark-present'].disabled, true);
+    assert.strictEqual(elements['sd-mark-absent'].disabled, true);
+
+    rejectPending(new Error('Save failed'));
+    await firstQuick;
+
+    assert.strictEqual(SubjectDetailComponent.isSubmittingAttendance, false);
+    assert.strictEqual(elements['sd-mark-present'].disabled, false);
+    assert.strictEqual(elements['sd-mark-absent'].disabled, false);
+    assert(toasts.some((t) => t.type === 'error' && t.msg.includes('Save failed')));
+
+    SubjectDetailComponent.attachModalEvents();
+    shouldFail = false;
+    const submitEvent = { preventDefault: () => {} };
+    const firstSubmit = elements['att-entry-form'].listeners.submit(submitEvent);
+    await elements['att-entry-form'].listeners.submit(submitEvent);
+
+    assert.strictEqual(postCalls, 2);
+    assert.strictEqual(elements['att-modal-save'].disabled, true);
+    resolvePending({ ok: true });
+    await firstSubmit;
+    assert.strictEqual(SubjectDetailComponent.isSubmittingAttendance, false);
+    assert.strictEqual(elements['att-modal-save'].disabled, false);
+  });
+
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {
     assert.strictEqual(valuesMatch('2026-11-25 10:00:00', new Date('2026-11-25T10:00:00.000Z'), 'created_at', []), true);
     assert.strictEqual(valuesMatch(1, true, 'is_active', ['is_active']), true);
@@ -524,6 +725,33 @@ async function runAll() {
         status: 'absent'
       }, tokenA);
       assert.strictEqual(dup.status, 409);
+
+      // Legitimate second lecture on the same day with a different start_time succeeds
+      const secondLecture = await request(server, 'POST', '/api/attendance', {
+        subject_id: subjectId,
+        date: '2026-11-24',
+        start_time: '11:00:00',
+        status: 'present'
+      }, tokenA);
+      assert.strictEqual(secondLecture.status, 201);
+      assert.strictEqual(secondLecture.body.subject.total, 2);
+
+      const db = getDatabase();
+      const firstAuditRows = await db.all(
+        'SELECT action FROM attendance_audit_log WHERE record_id = ?',
+        attendanceId
+      );
+      assert.strictEqual(firstAuditRows.length, 1);
+
+      const secondAuditRows = await db.all(
+        'SELECT action FROM attendance_audit_log WHERE record_id = ?',
+        secondLecture.body.record.id
+      );
+      assert.strictEqual(secondAuditRows.length, 1);
+
+      // Clean up the second lecture so downstream dashboard assertions see 1 record
+      const cleanup = await request(server, 'DELETE', `/api/attendance/${secondLecture.body.record.id}`, null, tokenA);
+      assert.strictEqual(cleanup.status, 200);
     });
 
     await asyncTest('Edit attendance updates subject percentage dynamically and logs exact audit trail', async () => {
@@ -879,6 +1107,51 @@ async function runAll() {
       assert.strictEqual(delTempSub.status, 200);
       const getDeletedSub = await request(server, 'GET', `/api/subjects/${tempSub.body.id}`, null, tokenA);
       assert.strictEqual(getDeletedSub.status, 404);
+
+      // 2b. Duplicate subject prevention (per user) & cross-user same-name support
+      const ds1 = await request(server, 'POST', '/api/subjects', {
+        name: 'Data Science',
+        code: 'DS301'
+      }, tokenA);
+      assert.strictEqual(ds1.status, 201);
+
+      const dsDupName = await request(server, 'POST', '/api/subjects', {
+        name: 'data science',
+        code: 'DS302'
+      }, tokenA);
+      assert.strictEqual(dsDupName.status, 409);
+
+      const dsDupCode = await request(server, 'POST', '/api/subjects', {
+        name: 'Applied Data Science',
+        code: 'ds301'
+      }, tokenA);
+      assert.strictEqual(dsDupCode.status, 409);
+
+      // Different user (User B) can independently create Data Science
+      const dsUserB = await request(server, 'POST', '/api/subjects', {
+        name: 'Data Science',
+        code: 'DS301'
+      }, tokenB);
+      assert.strictEqual(dsUserB.status, 201);
+
+      // Attendance recorded on User A's Data Science stays associated with ds1
+      const dsAtt = await request(server, 'POST', '/api/attendance', {
+        subject_id: ds1.body.id,
+        date: '2026-11-26',
+        start_time: '10:00:00',
+        status: 'present'
+      }, tokenA);
+      assert.strictEqual(dsAtt.status, 201);
+      assert.strictEqual(dsAtt.body.subject.attended, 1);
+
+      const listA = await request(server, 'GET', '/api/subjects', null, tokenA);
+      const dsMatchesA = listA.body.filter((s) => s.name === 'Data Science');
+      assert.strictEqual(dsMatchesA.length, 1);
+      assert.strictEqual(dsMatchesA[0].attended, 1);
+
+      // Clean up ds1 and dsUserB
+      await request(server, 'DELETE', `/api/subjects/${ds1.body.id}`, null, tokenA);
+      await request(server, 'DELETE', `/api/subjects/${dsUserB.body.id}`, null, tokenB);
 
       // 3. Deadlines ownership isolation and delete
       const dlB1 = await request(server, 'PUT', `/api/deadlines/${deadlineId}`, { title: 'Hacked' }, tokenB);
