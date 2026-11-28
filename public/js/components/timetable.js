@@ -1,6 +1,9 @@
 const TimetableComponent = {
   entries: [],
   subjects: [],
+  editingSlotId: null,
+  isSubmittingSlot: false,
+  isDeletingSlotId: null,
 
   render() {
     return `
@@ -29,7 +32,7 @@ const TimetableComponent = {
       <div id="add-slot-modal" class="fixed inset-0 z-[100] hidden items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
         <div class="bg-surface-container-lowest w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl space-y-4">
           <div class="flex items-center justify-between">
-            <h3 class="font-headline-sm text-headline-sm text-on-surface">Add Timetable Class</h3>
+            <h3 id="slot-modal-title" class="font-headline-sm text-headline-sm text-on-surface">Add Timetable Class</h3>
             <button id="close-slot-modal" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center"><span class="material-symbols-outlined text-[18px]">close</span></button>
           </div>
           <form id="add-slot-form" class="space-y-3">
@@ -47,6 +50,7 @@ const TimetableComponent = {
                   <option value="4">Thursday</option>
                   <option value="5">Friday</option>
                   <option value="6">Saturday</option>
+                  <option value="0">Sunday</option>
                   <option value="weekdays">Mon – Fri (All)</option>
                 </select>
               </div>
@@ -56,6 +60,7 @@ const TimetableComponent = {
                   <option value="lecture">Lecture</option>
                   <option value="lab">Lab</option>
                   <option value="tutorial">Tutorial</option>
+                  <option value="seminar">Seminar</option>
                   <option value="break">Break</option>
                   <option value="lunch">Lunch Break</option>
                 </select>
@@ -75,7 +80,7 @@ const TimetableComponent = {
                 <input id="slot-room" type="text" placeholder="Hall 3B" class="w-full rounded-xl bg-surface-container-low p-2.5 text-on-surface">
               </div>
             </div>
-            <button type="submit" class="w-full py-3 rounded-xl bg-primary text-on-primary font-label-tag uppercase tracking-wider font-semibold">Save Class Slot</button>
+            <button type="submit" id="slot-submit-btn" class="w-full py-3 rounded-xl bg-primary text-on-primary font-label-tag uppercase tracking-wider font-semibold">Save Class Slot</button>
           </form>
         </div>
       </div>
@@ -126,7 +131,7 @@ const TimetableComponent = {
       return;
     }
 
-    const days = [1, 2, 3, 4, 5, 6];
+    const days = [1, 2, 3, 4, 5, 6, 0];
     const todayDow = new Date().getDay();
     const timeSlots = [...new Set(this.entries.map(e => e.start_time))].sort();
 
@@ -165,7 +170,14 @@ const TimetableComponent = {
                           <div class="p-2 rounded-lg bg-surface-container-low border border-dashed border-secondary/40 relative">
                             <div class="flex items-center justify-between gap-1">
                               <span class="font-label-tag font-semibold text-[10px] text-secondary uppercase">${isLunch ? 'Lunch' : 'Break'}</span>
-                              <button data-del-slot="${match.id}" class="text-outline hover:text-error text-[12px]" title="Remove">&times;</button>
+                              <div class="flex items-center gap-1 shrink-0">
+                                <button type="button" data-edit-slot="${match.id}" aria-label="Edit timetable entry" class="p-0.5 text-outline hover:text-primary" title="Edit">
+                                  <span class="material-symbols-outlined text-[14px]">edit</span>
+                                </button>
+                                <button type="button" data-del-slot="${match.id}" aria-label="Delete timetable entry" class="p-0.5 text-outline hover:text-error" title="Delete">
+                                  <span class="material-symbols-outlined text-[14px]">delete</span>
+                                </button>
+                              </div>
                             </div>
                             <div class="font-headline-sm text-[11px] font-semibold text-on-surface mt-0.5 leading-tight truncate">${isLunch ? 'Lunch Break' : 'Break / Recess'}</div>
                             <div class="text-[10px] text-on-surface-variant truncate mt-0.5">${Helpers.escapeHtml(match.room || Helpers.formatTime(match.end_time))}</div>
@@ -179,7 +191,14 @@ const TimetableComponent = {
                         <div class="p-2 rounded-lg ${isLab ? 'bg-secondary-container/60 border border-secondary-container' : 'bg-surface-container-high/60 border border-surface-variant/40'} relative group">
                           <div class="flex items-center justify-between gap-1">
                             <span class="font-label-code font-semibold text-[11px] ${isLab ? 'text-on-secondary-container' : 'text-secondary'}">${Helpers.escapeHtml(match.subject_code)}</span>
-                            <button data-del-slot="${match.id}" class="text-outline hover:text-error text-[12px]" title="Remove">&times;</button>
+                            <div class="flex items-center gap-1 shrink-0">
+                              <button type="button" data-edit-slot="${match.id}" aria-label="Edit timetable entry" class="p-0.5 text-outline hover:text-primary" title="Edit">
+                                <span class="material-symbols-outlined text-[14px]">edit</span>
+                              </button>
+                              <button type="button" data-del-slot="${match.id}" aria-label="Delete timetable entry" class="p-0.5 text-outline hover:text-error" title="Delete">
+                                <span class="material-symbols-outlined text-[14px]">delete</span>
+                              </button>
+                            </div>
                           </div>
                           <div class="font-headline-sm text-[11px] font-semibold text-on-surface mt-0.5 leading-tight truncate">${Helpers.escapeHtml(match.subject_name)}</div>
                           <div class="text-[10px] text-on-surface-variant truncate mt-0.5">${Helpers.escapeHtml(match.room || match.session_type)}</div>
@@ -202,57 +221,114 @@ const TimetableComponent = {
       </div>
     `;
 
+    container.querySelectorAll('[data-edit-slot]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const entry = this.entries.find(item => item.id === btn.dataset.editSlot);
+        if (entry && this.openSlotModal) this.openSlotModal(entry);
+      });
+    });
+
     container.querySelectorAll('[data-del-slot]').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const slotId = btn.dataset.delSlot;
+        if (this.isDeletingSlotId === slotId) return;
+        const ok = await Helpers.confirm('Delete Timetable Entry', 'Remove this slot from your weekly timetable?', 'Delete');
+        if (!ok) return;
+        this.isDeletingSlotId = slotId;
+        btn.disabled = true;
         try {
-          await API.delete(`/timetable/${btn.dataset.delSlot}`);
+          await API.delete(`/timetable/${slotId}`);
           Helpers.showToast('Slot removed');
           await this.loadData();
         } catch (err) {
-          Helpers.showToast(err.message, 'error');
+          Helpers.showToast(err.message || 'Failed to delete slot', 'error');
+        } finally {
+          this.isDeletingSlotId = null;
+          btn.disabled = false;
         }
       });
     });
   },
 
+  applyTypeState(typeValue) {
+    const isBreak = typeValue === 'lunch' || typeValue === 'break';
+    const subjSelect = document.getElementById('slot-subject');
+    const subjLabel = document.getElementById('slot-subject-label');
+    const roomInput = document.getElementById('slot-room');
+    if (subjSelect) {
+      subjSelect.disabled = isBreak;
+      subjSelect.required = !isBreak;
+      subjSelect.classList.toggle('opacity-50', isBreak);
+    }
+    if (subjLabel) subjLabel.textContent = isBreak ? 'Subject (Not needed for break)' : 'Subject *';
+    if (roomInput) {
+      roomInput.placeholder = typeValue === 'lunch' ? 'Cafeteria / Break' : typeValue === 'break' ? 'Recess / Break' : 'Hall 3B';
+    }
+  },
+
   attachEvents() {
     const modal = document.getElementById('add-slot-modal');
+    const modalTitle = document.getElementById('slot-modal-title');
+    const submitBtn = document.getElementById('slot-submit-btn');
+    const weekdaysOption = document.querySelector('#slot-day option[value="weekdays"]');
+
     const toggle = (show) => {
+      if (!show) this.editingSlotId = null;
       modal?.classList.toggle('hidden', !show);
       modal?.classList.toggle('flex', show);
     };
 
-    document.getElementById('btn-add-slot')?.addEventListener('click', () => toggle(true));
+    this.openSlotModal = (entry = null) => {
+      if (entry && entry.id) {
+        this.editingSlotId = entry.id;
+        if (modalTitle) modalTitle.textContent = 'Edit Timetable Class';
+        if (submitBtn) submitBtn.textContent = 'Save Changes';
+        if (weekdaysOption) weekdaysOption.hidden = true;
+        document.getElementById('slot-day').value = String(entry.day_of_week ?? 1);
+        document.getElementById('slot-type').value = entry.session_type || 'lecture';
+        document.getElementById('slot-start').value = String(entry.start_time || '09:00').slice(0, 5);
+        document.getElementById('slot-end').value = String(entry.end_time || '10:30').slice(0, 5);
+        document.getElementById('slot-room').value = entry.room || '';
+        const subjSelect = document.getElementById('slot-subject');
+        if (subjSelect && entry.subject_id) subjSelect.value = entry.subject_id;
+        this.applyTypeState(entry.session_type || 'lecture');
+      } else {
+        this.editingSlotId = null;
+        if (modalTitle) modalTitle.textContent = 'Add Timetable Class';
+        if (submitBtn) submitBtn.textContent = 'Save Class Slot';
+        if (weekdaysOption) weekdaysOption.hidden = false;
+        document.getElementById('add-slot-form')?.reset();
+        document.getElementById('slot-start').value = '09:00';
+        document.getElementById('slot-end').value = '10:30';
+        this.applyTypeState(document.getElementById('slot-type')?.value || 'lecture');
+      }
+      toggle(true);
+    };
+
+    document.getElementById('btn-add-slot')?.addEventListener('click', () => this.openSlotModal(null));
     document.getElementById('close-slot-modal')?.addEventListener('click', () => toggle(false));
 
     document.getElementById('slot-type')?.addEventListener('change', (e) => {
-      const isBreak = e.target.value === 'lunch' || e.target.value === 'break';
-      const subjSelect = document.getElementById('slot-subject');
-      const subjLabel = document.getElementById('slot-subject-label');
-      const roomInput = document.getElementById('slot-room');
-      const startInput = document.getElementById('slot-start');
-      const endInput = document.getElementById('slot-end');
-      if (subjSelect) {
-        subjSelect.disabled = isBreak;
-        subjSelect.required = !isBreak;
-        subjSelect.classList.toggle('opacity-50', isBreak);
-      }
-      if (subjLabel) subjLabel.textContent = isBreak ? 'Subject (Not needed for break)' : 'Subject *';
-      if (e.target.value === 'lunch') {
-        if (startInput) startInput.value = '12:45';
-        if (endInput) endInput.value = '13:30';
-        if (roomInput) roomInput.placeholder = 'Cafeteria / Break';
-      } else if (e.target.value === 'break') {
-        if (startInput) startInput.value = '10:30';
-        if (endInput) endInput.value = '11:00';
-        if (roomInput) roomInput.placeholder = 'Recess / Break';
-      } else {
-        if (roomInput) roomInput.placeholder = 'Hall 3B';
+      this.applyTypeState(e.target.value);
+      if (!this.editingSlotId) {
+        const startInput = document.getElementById('slot-start');
+        const endInput = document.getElementById('slot-end');
+        if (e.target.value === 'lunch') {
+          if (startInput) startInput.value = '12:45';
+          if (endInput) endInput.value = '13:30';
+        } else if (e.target.value === 'break') {
+          if (startInput) startInput.value = '10:30';
+          if (endInput) endInput.value = '11:00';
+        }
       }
     });
 
     document.getElementById('add-slot-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (this.isSubmittingSlot) return;
+
       const sessionType = document.getElementById('slot-type').value;
       const isBreak = sessionType === 'lunch' || sessionType === 'break';
       const subjectId = document.getElementById('slot-subject').value;
@@ -260,24 +336,52 @@ const TimetableComponent = {
         Helpers.showToast('Please add a subject first', 'warning');
         return;
       }
+
+      const startTime = document.getElementById('slot-start').value;
+      const endTime = document.getElementById('slot-end').value;
+      if (!startTime || !endTime || endTime <= startTime) {
+        Helpers.showToast('End time must be later than start time', 'error');
+        return;
+      }
+
+      this.isSubmittingSlot = true;
+      if (submitBtn) submitBtn.disabled = true;
+
+      const room = document.getElementById('slot-room').value.trim() || null;
       const dayVal = document.getElementById('slot-day').value;
-      const daysToCreate = dayVal === 'weekdays' ? [1, 2, 3, 4, 5] : [parseInt(dayVal)];
+
       try {
-        for (const d of daysToCreate) {
-          await API.post('/timetable', {
+        if (this.editingSlotId) {
+          await API.put(`/timetable/${this.editingSlotId}`, {
             subject_id: isBreak ? null : subjectId,
-            day_of_week: d,
-            start_time: document.getElementById('slot-start').value,
-            end_time: document.getElementById('slot-end').value,
+            day_of_week: parseInt(dayVal, 10),
+            start_time: startTime,
+            end_time: endTime,
             session_type: sessionType,
-            room: document.getElementById('slot-room').value.trim() || null
+            room
           });
+          Helpers.showToast('Timetable entry updated');
+        } else {
+          const daysToCreate = dayVal === 'weekdays' ? [1, 2, 3, 4, 5] : [parseInt(dayVal, 10)];
+          for (const d of daysToCreate) {
+            await API.post('/timetable', {
+              subject_id: isBreak ? null : subjectId,
+              day_of_week: d,
+              start_time: startTime,
+              end_time: endTime,
+              session_type: sessionType,
+              room
+            });
+          }
+          Helpers.showToast(sessionType === 'lunch' ? 'Lunch break added' : sessionType === 'break' ? 'Break slot added' : 'Class slot added');
         }
-        Helpers.showToast(sessionType === 'lunch' ? 'Lunch break added' : sessionType === 'break' ? 'Break slot added' : 'Class slot added');
         toggle(false);
         await this.loadData();
       } catch (err) {
-        Helpers.showToast(err.message, 'error');
+        Helpers.showToast(err.message || 'Failed to save timetable entry', 'error');
+      } finally {
+        this.isSubmittingSlot = false;
+        if (submitBtn) submitBtn.disabled = false;
       }
     });
 

@@ -61,11 +61,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/subjects/archived
+router.get('/archived', async (req, res) => {
+  try {
+    const db = getDatabase();
+    const subjects = await db.all(
+      'SELECT * FROM subjects WHERE user_id = ? AND is_active = 0 ORDER BY updated_at DESC, name ASC',
+      req.user.id
+    );
+    const enriched = await Promise.all(subjects.map(s => enrichSubject(db, s)));
+    res.json(enriched);
+  } catch (err) {
+    console.error('Get archived subjects error:', err);
+    res.status(500).json({ error: 'Failed to fetch archived subjects' });
+  }
+});
+
 // POST /api/subjects
 router.post('/', [
   body('name').trim().notEmpty().withMessage('Subject name is required'),
   body('code').trim().notEmpty().withMessage('Subject code is required'),
-  body('required_attendance').optional().isFloat({ min: 0, max: 100 })
+  body('required_attendance').optional({ values: 'null' }).customSanitizer(v => (v === '' ? undefined : v)).optional().isFloat({ min: 0, max: 100 }),
+  body('credits').optional({ values: 'null' }).customSanitizer(v => (v === '' ? undefined : v)).optional().isFloat({ min: 0, max: 10 }).withMessage('Credits must be between 0 and 10'),
+  body('frequency_per_week').optional({ values: 'null' }).customSanitizer(v => (v === '' ? undefined : v)).optional().isInt({ min: 1, max: 14 }).withMessage('Frequency per week must be between 1 and 14')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -84,10 +102,14 @@ router.post('/', [
       return res.status(409).json({ error: 'A subject with this name or code already exists' });
     }
 
+    const parsedCredits = credits !== undefined && credits !== null && credits !== '' ? Number(credits) : 3.0;
+    const parsedFreq = frequency_per_week !== undefined && frequency_per_week !== null && frequency_per_week !== '' ? parseInt(frequency_per_week, 10) : 3;
+    const parsedReq = required_attendance !== undefined && required_attendance !== null && required_attendance !== '' ? Number(required_attendance) : 75.0;
+
     await db.run(`
       INSERT INTO subjects (id, user_id, name, code, faculty_name, credits, frequency_per_week, room, required_attendance, color)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, id, req.user.id, name, code, faculty_name || null, credits || 3.0, frequency_per_week || 3, room || null, required_attendance || 75.0, color || '#91A995');
+    `, id, req.user.id, name, code, faculty_name || null, parsedCredits, parsedFreq, room || null, parsedReq, color || '#91A995');
 
     const subject = await db.get('SELECT * FROM subjects WHERE id = ? AND user_id = ?', id, req.user.id);
     res.status(201).json(await enrichSubject(db, subject));
@@ -101,7 +123,7 @@ router.post('/', [
 router.get('/:id', async (req, res) => {
   try {
     const db = getDatabase();
-    const subject = await db.get('SELECT * FROM subjects WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+    const subject = await db.get('SELECT * FROM subjects WHERE id = ? AND user_id = ? AND is_active = 1', req.params.id, req.user.id);
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
 
     const enriched = await enrichSubject(db, subject);
@@ -120,10 +142,19 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/subjects/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', [
+  body('name').optional().trim().notEmpty().withMessage('Subject name cannot be empty'),
+  body('code').optional().trim().notEmpty().withMessage('Subject code cannot be empty'),
+  body('required_attendance').optional({ values: 'null' }).customSanitizer(v => (v === '' ? undefined : v)).optional().isFloat({ min: 0, max: 100 }).withMessage('Required attendance must be between 0 and 100'),
+  body('credits').optional({ values: 'null' }).customSanitizer(v => (v === '' ? undefined : v)).optional().isFloat({ min: 0, max: 10 }).withMessage('Credits must be between 0 and 10'),
+  body('frequency_per_week').optional({ values: 'null' }).customSanitizer(v => (v === '' ? undefined : v)).optional().isInt({ min: 1, max: 14 }).withMessage('Frequency per week must be between 1 and 14')
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+
     const db = getDatabase();
-    const subject = await db.get('SELECT * FROM subjects WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+    const subject = await db.get('SELECT * FROM subjects WHERE id = ? AND user_id = ? AND is_active = 1', req.params.id, req.user.id);
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
 
     const { name, code, faculty_name, credits, frequency_per_week, room, required_attendance, color } = req.body;
@@ -157,12 +188,107 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/subjects/:id
+const normalizeTime = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (/^\d{2}:\d{2}$/.test(trimmed)) return `${trimmed}:00`;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+  return null;
+};
+
+// POST /api/subjects/:id/restore
+router.post('/:id/restore', async (req, res) => {
+  try {
+    const db = getDatabase();
+    const restored = await db.transaction(async (tx) => {
+      const archived = await tx.get(
+        'SELECT * FROM subjects WHERE id = ? AND user_id = ? AND is_active = 0',
+        req.params.id, req.user.id
+      );
+      if (!archived) return { status: 404, error: 'Archived subject not found' };
+
+      const conflict = await tx.get(`
+        SELECT id FROM subjects
+        WHERE user_id = ? AND is_active = 1 AND id != ?
+          AND (LOWER(TRIM(code)) = LOWER(TRIM(?)) OR LOWER(TRIM(name)) = LOWER(TRIM(?)))
+      `, req.user.id, archived.id, archived.code, archived.name);
+      if (conflict) {
+        return { status: 409, error: 'An active subject with this name or code already exists' };
+      }
+
+      const archivedSlots = await tx.all(
+        'SELECT id, day_of_week, start_time, end_time FROM timetable_entries WHERE subject_id = ? AND user_id = ? AND is_active = 0',
+        archived.id, req.user.id
+      );
+      if (archivedSlots.length > 0) {
+        const activeSlots = await tx.all(
+          'SELECT id, day_of_week, start_time, end_time FROM timetable_entries WHERE user_id = ? AND is_active = 1',
+          req.user.id
+        );
+        const hasOverlap = archivedSlots.some((arch) => {
+          const aStart = normalizeTime(String(arch.start_time));
+          const aEnd = normalizeTime(String(arch.end_time));
+          if (!aStart || !aEnd) return false;
+          return activeSlots.some((act) => {
+            if (Number(act.day_of_week) !== Number(arch.day_of_week)) return false;
+            const bStart = normalizeTime(String(act.start_time));
+            const bEnd = normalizeTime(String(act.end_time));
+            return bStart && bEnd && bStart < aEnd && bEnd > aStart;
+          });
+        });
+        if (hasOverlap) {
+          return {
+            status: 409,
+            error: 'Cannot restore subject because one or more of its timetable slots conflict with existing active timetable entries'
+          };
+        }
+      }
+
+      await tx.run(
+        'UPDATE subjects SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+        archived.id, req.user.id
+      );
+      await tx.run(
+        'UPDATE timetable_entries SET is_active = 1 WHERE subject_id = ? AND user_id = ?',
+        archived.id, req.user.id
+      );
+
+      const row = await tx.get('SELECT * FROM subjects WHERE id = ? AND user_id = ?', archived.id, req.user.id);
+      return { status: 200, row };
+    });
+
+    if (restored.error) return res.status(restored.status).json({ error: restored.error });
+    res.json(await enrichSubject(db, restored.row));
+  } catch (err) {
+    if (isInvalidInputError(err)) return res.status(404).json({ error: 'Archived subject not found' });
+    console.error('Restore subject error:', err);
+    res.status(500).json({ error: 'Failed to restore subject' });
+  }
+});
+
+// DELETE /api/subjects/:id (soft-archive to preserve attendance, deadlines, and timetable history)
 router.delete('/:id', async (req, res) => {
   try {
     const db = getDatabase();
-    const result = await db.run('DELETE FROM subjects WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Subject not found' });
+    const archived = await db.transaction(async (tx) => {
+      const existing = await tx.get(
+        'SELECT id FROM subjects WHERE id = ? AND user_id = ? AND is_active = 1',
+        req.params.id, req.user.id
+      );
+      if (!existing) return false;
+
+      await tx.run(
+        'UPDATE subjects SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+        req.params.id, req.user.id
+      );
+      await tx.run(
+        'UPDATE timetable_entries SET is_active = 0 WHERE subject_id = ? AND user_id = ?',
+        req.params.id, req.user.id
+      );
+      return true;
+    });
+
+    if (!archived) return res.status(404).json({ error: 'Subject not found' });
     res.json({ message: 'Subject deleted successfully' });
   } catch (err) {
     if (isInvalidInputError(err)) return res.status(404).json({ error: 'Subject not found' });

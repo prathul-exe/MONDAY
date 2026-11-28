@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
     let query = `
       SELECT d.*, s.name as subject_name, s.code as subject_code
       FROM deadlines d
-      LEFT JOIN subjects s ON d.subject_id = s.id
+      LEFT JOIN subjects s ON d.subject_id = s.id AND s.is_active = 1
       WHERE d.user_id = ?
     `;
     const params = [req.user.id];
@@ -65,7 +65,7 @@ router.post('/', [
     }
 
     if (subject_id) {
-      const subj = await db.get('SELECT id FROM subjects WHERE id = ? AND user_id = ?', subject_id, req.user.id);
+      const subj = await db.get('SELECT id FROM subjects WHERE id = ? AND user_id = ? AND is_active = 1', subject_id, req.user.id);
       if (!subj) return res.status(404).json({ error: 'Subject not found' });
     }
 
@@ -128,7 +128,7 @@ router.put('/:id', async (req, res) => {
     }
 
     if (subject_id) {
-      const subj = await db.get('SELECT id FROM subjects WHERE id = ? AND user_id = ?', subject_id, req.user.id);
+      const subj = await db.get('SELECT id FROM subjects WHERE id = ? AND user_id = ? AND is_active = 1', subject_id, req.user.id);
       if (!subj) return res.status(404).json({ error: 'Subject not found' });
     }
 

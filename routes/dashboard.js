@@ -104,7 +104,7 @@ router.get('/', async (req, res) => {
     const upcomingDeadlines = await db.all(`
       SELECT d.*, s.code as subject_code, s.name as subject_name
       FROM deadlines d
-      LEFT JOIN subjects s ON d.subject_id = s.id
+      LEFT JOIN subjects s ON d.subject_id = s.id AND s.is_active = 1
       WHERE d.user_id = ? AND d.is_completed = 0
       ORDER BY d.due_date ASC, d.due_time ASC
       LIMIT 5

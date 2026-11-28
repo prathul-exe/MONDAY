@@ -299,6 +299,9 @@ async function runAll() {
       },
       App: { currentUser: { full_name: 'Maya', semester: 4 } },
       NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB', strokeColor: '#4D7E5C' })
+      },
       Helpers: {
         escapeHtml: (v) => String(v ?? ''),
         loadingSpinner: () => '',
@@ -356,6 +359,9 @@ async function runAll() {
       },
       App: { currentUser: { full_name: 'Maya', semester: 4 } },
       NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB', strokeColor: '#4D7E5C' })
+      },
       Helpers: {
         escapeHtml: (v) => String(v ?? ''),
         loadingSpinner: () => '',
@@ -441,6 +447,9 @@ async function runAll() {
         querySelectorAll: () => []
       },
       NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB', strokeColor: '#4D7E5C' })
+      },
       Helpers: {
         escapeHtml: (v) => String(v ?? ''),
         loadingSpinner: () => '',
@@ -539,6 +548,9 @@ async function runAll() {
         querySelectorAll: (sel) => (sel === '.dl-cat-btn' ? catButtons : [])
       },
       NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB', strokeColor: '#4D7E5C' })
+      },
       Helpers: {
         escapeHtml: (v) => String(v ?? ''),
         loadingSpinner: () => '',
@@ -814,6 +826,381 @@ async function runAll() {
     assert.strictEqual(handled[0].hash, '#subject/sub-1');
     assert.strictEqual(JSON.stringify(handled[0].params), '{}');
     assert.strictEqual(JSON.stringify(Router._pendingNavigation), JSON.stringify({ hash: 'settings', params: { section: 'security' } }));
+  });
+
+  await asyncTest('Logout from #settings clears hash/router state and re-login navigates to dashboard', async () => {
+    const routerSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'router.js'), 'utf8');
+    const authSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'services', 'auth.js'), 'utf8');
+    const appSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+
+    const listeners = {};
+    const appEl = { innerHTML: '' };
+    const locationObj = {
+      pathname: '/',
+      search: '',
+      _hash: '#settings',
+      get hash() { return this._hash; },
+      set hash(val) {
+        const next = val ? (val.startsWith('#') ? val : `#${val}`) : '';
+        if (next === this._hash) return;
+        const oldUrl = `https://localhost/${this._hash}`;
+        const newUrl = `https://localhost/${next}`;
+        this._hash = next;
+        queueMicrotask(() => (listeners.hashchange || []).forEach((fn) => fn({ oldURL: oldUrl, newURL: newUrl })));
+      }
+    };
+
+    let storedToken = 'initial-jwt';
+    const sandbox = {
+      window: {
+        location: locationObj,
+        addEventListener: (evt, fn) => {
+          listeners[evt] = listeners[evt] || [];
+          listeners[evt].push(fn);
+        }
+      },
+      history: {
+        replaceState: (_state, _title, url) => {
+          const idx = String(url).indexOf('#');
+          locationObj._hash = idx === -1 ? '' : String(url).slice(idx);
+        }
+      },
+      document: {
+        getElementById: (id) => (id === 'app' ? appEl : null),
+        addEventListener: () => {}
+      },
+      TokenStorage: {
+        getSync: () => storedToken,
+        set: async (t) => { storedToken = t; },
+        remove: async () => { storedToken = null; }
+      },
+      localStorage: {
+        getItem: () => 'light',
+        setItem: () => {},
+        removeItem: () => {}
+      },
+      API: {
+        post: async (url) => (url === '/auth/login' ? { token: 'fresh-jwt', user: { id: 'u1', full_name: 'Maya' } } : {})
+      },
+      OnboardingComponent: {
+        view: 'welcome',
+        render: () => '<div id="onboarding-login">Login View</div>',
+        attachEvents: () => {}
+      },
+      DashboardComponent: {
+        render: () => '<div id="dashboard-root">Dashboard Loaded</div>',
+        init: () => {}
+      },
+      SettingsComponent: {
+        render: () => '<div id="settings-root">Settings Loaded</div>',
+        init: () => {}
+      },
+      requestAnimationFrame: (fn) => fn()
+    };
+
+    vm.runInNewContext(`${routerSource}\n${authSource}\n${appSource}\nthis.Router = Router;\nthis.AuthService = AuthService;\nthis.App = App;\nthis.OnboardingComponent = OnboardingComponent;`, sandbox);
+    const { Router, AuthService, App, OnboardingComponent } = sandbox;
+
+    // 1. User is authenticated and viewing #settings
+    App.showApp();
+    await new Promise((r) => setTimeout(r, 0));
+    assert(appEl.innerHTML.includes('Settings Loaded'));
+    assert.strictEqual(Router._activeHash, 'settings');
+
+    // 2. User logs out from #settings
+    await AuthService.logout();
+    assert.strictEqual(storedToken, null);
+    assert.strictEqual(locationObj.hash, '');
+    assert.strictEqual(Router._activeHash, null);
+    assert.strictEqual(OnboardingComponent.view, 'login');
+    assert(appEl.innerHTML.includes('Login View'));
+
+    // 3. User signs back in and App.showApp() runs
+    await AuthService.login('maya@example.com', 'secret123');
+    App.showApp();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(locationObj.hash, '#dashboard');
+    assert.strictEqual(Router._activeHash, 'dashboard');
+    assert(appEl.innerHTML.includes('Dashboard Loaded'));
+  });
+
+  await asyncTest('SubjectDetailComponent edits credits/frequency_per_week and guards failed or repeated deletion', async () => {
+    const detailSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'subject-detail.js'), 'utf8');
+    const makeClassList = () => ({ add: () => {}, remove: () => {} });
+    const elements = {
+      'edit-subject-modal': { classList: makeClassList() },
+      'es-name': { value: '' },
+      'es-code': { value: '' },
+      'es-req': { value: '' },
+      'es-credits': { value: '' },
+      'es-freq': { value: '' },
+      'es-faculty': { value: '' },
+      'es-room': { value: '' },
+      'es-save-btn': { disabled: false },
+      'es-delete-btn': {
+        disabled: false,
+        listeners: {},
+        addEventListener(evt, fn) { this.listeners[evt] = fn; }
+      },
+      'edit-subj-form': {
+        listeners: {},
+        addEventListener(evt, fn) { this.listeners[evt] = fn; }
+      }
+    };
+    const putCalls = [];
+    const deleteCalls = [];
+    const navigatedTo = [];
+    const toasts = [];
+    let rejectDelete;
+
+    const sandbox = {
+      document: {
+        getElementById: (id) => elements[id] || null,
+        querySelectorAll: () => []
+      },
+      NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB', strokeColor: '#4D7E5C' })
+      },
+      Helpers: {
+        escapeHtml: (v) => String(v ?? ''),
+        loadingSpinner: () => '',
+        confirm: async () => true,
+        showToast: (msg, type = 'success') => toasts.push({ msg, type })
+      },
+      Router: { navigate: (dest) => navigatedTo.push(dest) },
+      API: {
+        put: async (url, body) => {
+          putCalls.push({ url, body });
+          return body;
+        },
+        delete: (url) => {
+          deleteCalls.push(url);
+          return new Promise((_, reject) => { rejectDelete = reject; });
+        }
+      }
+    };
+    vm.runInNewContext(`${detailSource}\nthis.SubjectDetailComponent = SubjectDetailComponent;`, sandbox);
+    const { SubjectDetailComponent } = sandbox;
+    SubjectDetailComponent.subjectId = 'sub-ml-3';
+    SubjectDetailComponent.subject = {
+      id: 'sub-ml-3',
+      name: 'Machine Learning Level 3',
+      code: 'ML303',
+      required_attendance: 80,
+      credits: 4.5,
+      frequency_per_week: 5,
+      faculty_name: 'Dr. Rao',
+      room: 'AI-2'
+    };
+    SubjectDetailComponent.loadData = async () => {};
+
+    const modalHtml = SubjectDetailComponent.render('sub-ml-3');
+    assert(modalHtml.includes('id="es-credits"'));
+    assert(modalHtml.includes('id="es-freq"'));
+
+    SubjectDetailComponent.openEditSubjectModal();
+    assert.strictEqual(elements['es-credits'].value, 4.5);
+    assert.strictEqual(elements['es-freq'].value, 5);
+
+    elements['es-credits'].value = '5';
+    elements['es-freq'].value = '6';
+    SubjectDetailComponent.attachModalEvents();
+    await elements['edit-subj-form'].listeners.submit({ preventDefault: () => {} });
+    assert.strictEqual(putCalls.length, 1);
+    assert.strictEqual(putCalls[0].url, '/subjects/sub-ml-3');
+    assert.strictEqual(putCalls[0].body.credits, 5);
+    assert.strictEqual(putCalls[0].body.frequency_per_week, 6);
+
+    // Rapid repeated delete clicks only send one DELETE, and failed delete does not navigate away
+    const firstDelete = elements['es-delete-btn'].listeners.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await elements['es-delete-btn'].listeners.click();
+    assert.strictEqual(deleteCalls.length, 1);
+    assert.strictEqual(elements['es-delete-btn'].disabled, true);
+    assert.strictEqual(SubjectDetailComponent.isDeletingSubject, true);
+
+    rejectDelete(new Error('Delete failed'));
+    await firstDelete;
+    assert.strictEqual(navigatedTo.length, 0);
+    assert.strictEqual(SubjectDetailComponent.isDeletingSubject, false);
+    assert.strictEqual(elements['es-delete-btn'].disabled, false);
+    assert(toasts.some((t) => t.type === 'error' && t.msg.includes('Delete failed')));
+
+    // Zero-credit display and edit support
+    SubjectDetailComponent.subject = {
+      id: 'sub-zero',
+      name: 'Audit Seminar',
+      code: 'AS001',
+      required_attendance: 75,
+      credits: 0,
+      frequency_per_week: 2,
+      attended: 0,
+      absent: 0,
+      excused: 0,
+      total: 0,
+      percentage: 0,
+      status: 'safe',
+      status_label: 'Safe',
+      status_color: '#4D7E5C',
+      status_bg_color: '#E8F3EB',
+      classes_can_miss: 0,
+      classes_needed: 0
+    };
+    SubjectDetailComponent.records = [];
+    SubjectDetailComponent.subjectId = 'sub-zero';
+    let detailBodyHtml = '';
+    sandbox.document.getElementById = (id) => (id === 'subject-detail-body' ? { set innerHTML(v) { detailBodyHtml = v; }, querySelectorAll: () => [] } : (elements[id] || null));
+    SubjectDetailComponent.renderBody();
+    assert(detailBodyHtml.includes('>0<'));
+    assert.strictEqual(detailBodyHtml.includes('>3<'), false);
+
+    SubjectDetailComponent.openEditSubjectModal();
+    assert.strictEqual(elements['es-credits'].value, 0);
+    elements['es-credits'].value = '0';
+    await elements['edit-subj-form'].listeners.submit({ preventDefault: () => {} });
+    assert.strictEqual(putCalls[1].body.credits, 0);
+  });
+
+  await asyncTest('TimetableComponent separates Edit/Delete actions, validates time range, and preserves entries on failure', async () => {
+    const ttSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'timetable.js'), 'utf8');
+    const makeClassList = (initial = []) => {
+      const s = new Set(initial);
+      return {
+        add: (...c) => c.forEach((x) => s.add(x)),
+        remove: (...c) => c.forEach((x) => s.delete(x)),
+        toggle: (c, f) => (f === undefined ? (s.has(c) ? s.delete(c) : s.add(c)) : (f ? s.add(c) : s.delete(c))),
+        contains: (c) => s.has(c)
+      };
+    };
+    const editButtons = [];
+    const delButtons = [];
+    const container = {
+      _html: '',
+      get innerHTML() { return this._html; },
+      set innerHTML(val) {
+        this._html = val;
+        editButtons.length = 0;
+        delButtons.length = 0;
+        const editMatches = val.match(/data-edit-slot="([^"]+)"/g) || [];
+        const delMatches = val.match(/data-del-slot="([^"]+)"/g) || [];
+        editMatches.forEach((m) => {
+          const id = m.match(/"([^"]+)"/)[1];
+          const listeners = {};
+          editButtons.push({ dataset: { editSlot: id }, disabled: false, addEventListener(e, fn) { listeners[e] = fn; }, click() { return listeners.click?.({ stopPropagation: () => {} }); } });
+        });
+        delMatches.forEach((m) => {
+          const id = m.match(/"([^"]+)"/)[1];
+          const listeners = {};
+          delButtons.push({ dataset: { delSlot: id }, disabled: false, addEventListener(e, fn) { listeners[e] = fn; }, click() { return listeners.click?.({ stopPropagation: () => {} }); } });
+        });
+      },
+      querySelectorAll: (sel) => (sel === '[data-edit-slot]' ? editButtons : sel === '[data-del-slot]' ? delButtons : [])
+    };
+    const elements = {
+      'timetable-matrix-container': container,
+      'add-slot-modal': { classList: makeClassList(['hidden']) },
+      'slot-modal-title': { textContent: '' },
+      'slot-submit-btn': { textContent: '', disabled: false },
+      'slot-subject': { value: 'sub-1', disabled: false, required: true, classList: makeClassList() },
+      'slot-subject-label': { textContent: '' },
+      'slot-day': { value: '1' },
+      'slot-type': { value: 'lecture', addEventListener: () => {} },
+      'slot-start': { value: '09:00' },
+      'slot-end': { value: '10:30' },
+      'slot-room': { value: '', placeholder: '' },
+      'add-slot-form': {
+        listeners: {},
+        reset() {},
+        addEventListener(e, fn) { this.listeners[e] = fn; }
+      }
+    };
+    const requests = [];
+    const toasts = [];
+    let shouldFailDelete = true;
+
+    const sandbox = {
+      document: {
+        getElementById: (id) => elements[id] || null,
+        querySelector: () => ({ hidden: false })
+      },
+      NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      AttendanceCalc: {
+        getStatus: () => ({ status: 'safe', label: 'Safe', color: '#4D7E5C', bgColor: '#E8F3EB', strokeColor: '#4D7E5C' })
+      },
+      Helpers: {
+        escapeHtml: (v) => String(v ?? ''),
+        loadingSpinner: () => '',
+        dayNameShort: (d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d],
+        formatTime: (t) => t,
+        confirm: async () => true,
+        showToast: (msg, type = 'success') => toasts.push({ msg, type })
+      },
+      API: {
+        put: async (url, body) => {
+          requests.push({ method: 'PUT', url, body });
+          return body;
+        },
+        delete: async (url) => {
+          requests.push({ method: 'DELETE', url });
+          if (shouldFailDelete) throw new Error('Delete failed');
+          return { message: 'Deleted' };
+        }
+      }
+    };
+    vm.runInNewContext(`${ttSource}\nthis.TimetableComponent = TimetableComponent;`, sandbox);
+    const { TimetableComponent } = sandbox;
+    TimetableComponent.entries = [
+      { id: 'slot-1', subject_id: 'sub-1', subject_code: 'CS101', subject_name: 'Algorithms', day_of_week: 1, start_time: '09:00', end_time: '10:30', session_type: 'lecture', room: 'LH-1' },
+      { id: 'slot-sun', subject_id: 'sub-1', subject_code: 'CS101', subject_name: 'Algorithms', day_of_week: 0, start_time: '14:00', end_time: '15:00', session_type: 'lecture', room: 'Sun-Room' }
+    ];
+    TimetableComponent.subjects = [{ id: 'sub-1', code: 'CS101', name: 'Algorithms' }];
+    TimetableComponent.loadData = async () => {};
+    TimetableComponent.attachEvents();
+    TimetableComponent.renderMatrix();
+
+    assert(container.innerHTML.includes('>Sun<'));
+    assert(container.innerHTML.includes('Sun-Room'));
+    assert.strictEqual(editButtons.length, 2);
+    assert.strictEqual(delButtons.length, 2);
+
+    // Clicking Edit on Sunday opens modal populated with Sunday entry and never triggers Delete
+    editButtons[1].click();
+    assert.strictEqual(requests.length, 0);
+    assert.strictEqual(TimetableComponent.editingSlotId, 'slot-sun');
+    assert.strictEqual(elements['slot-day'].value, '0');
+    assert.strictEqual(elements['slot-room'].value, 'Sun-Room');
+
+    // Clicking Edit on Monday opens modal populated with Monday entry and never triggers Delete
+    editButtons[0].click();
+    assert.strictEqual(requests.length, 0);
+    assert.strictEqual(TimetableComponent.editingSlotId, 'slot-1');
+    assert.strictEqual(elements['slot-room'].value, 'LH-1');
+
+    // Invalid time range (end <= start) is rejected before PUT
+    elements['slot-start'].value = '11:00';
+    elements['slot-end'].value = '10:00';
+    await elements['add-slot-form'].listeners.submit({ preventDefault: () => {} });
+    assert.strictEqual(requests.length, 0);
+    assert(toasts.some((t) => t.type === 'error' && t.msg.includes('End time')));
+
+    // Valid edit calls PUT /timetable/slot-1
+    elements['slot-start'].value = '10:00';
+    elements['slot-end'].value = '11:30';
+    elements['slot-room'].value = 'LH-2';
+    await elements['add-slot-form'].listeners.submit({ preventDefault: () => {} });
+    assert.strictEqual(requests.length, 1);
+    assert.strictEqual(requests[0].method, 'PUT');
+    assert.strictEqual(requests[0].url, '/timetable/slot-1');
+    assert.strictEqual(requests[0].body.room, 'LH-2');
+
+    // Failed deletion does not remove entry from TimetableComponent.entries
+    await delButtons[1].click();
+    assert.strictEqual(requests.length, 2);
+    assert.strictEqual(requests[1].method, 'DELETE');
+    assert.strictEqual(requests[1].url, '/timetable/slot-sun');
+    assert.strictEqual(TimetableComponent.entries.length, 2);
+    assert.strictEqual(delButtons[1].disabled, false);
   });
 
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {
@@ -1252,6 +1639,48 @@ async function runAll() {
       assert.strictEqual(breakRes.body.session_type, 'break');
       assert.strictEqual(breakRes.body.subject_id, null);
 
+      // Invalid time range and overlapping slot rejection
+      const badTimeRes = await request(server, 'POST', '/api/timetable', {
+        subject_id: subjectId,
+        day_of_week: 2,
+        start_time: '12:00',
+        end_time: '11:00'
+      }, tokenA);
+      assert.strictEqual(badTimeRes.status, 400);
+
+      const overlapRes = await request(server, 'POST', '/api/timetable', {
+        subject_id: subjectId,
+        day_of_week: 1,
+        start_time: '09:30',
+        end_time: '10:15'
+      }, tokenA);
+      assert.strictEqual(overlapRes.status, 409);
+
+      // Edit existing slot (excluding self from overlap check) and verify persistence
+      const editSlotRes = await request(server, 'PUT', `/api/timetable/${slotId}`, {
+        day_of_week: 2,
+        start_time: '09:30',
+        end_time: '11:00',
+        room: 'Lab-204'
+      }, tokenA);
+      assert.strictEqual(editSlotRes.status, 200);
+      assert.strictEqual(editSlotRes.body.day_of_week, 2);
+      assert.strictEqual(editSlotRes.body.room, 'Lab-204');
+
+      // Cannot edit slot to overlap with break slot on day 1
+      const overlapEditRes = await request(server, 'PUT', `/api/timetable/${slotId}`, {
+        day_of_week: 1,
+        start_time: '10:30',
+        end_time: '11:30'
+      }, tokenA);
+      assert.strictEqual(overlapEditRes.status, 409);
+
+      const ttAfterEdit = await request(server, 'GET', '/api/timetable', null, tokenA);
+      const editedSlot = ttAfterEdit.body.entries.find((e) => e.id === slotId);
+      assert(editedSlot);
+      assert.strictEqual(editedSlot.day_of_week, 2);
+      assert.strictEqual(editedSlot.room, 'Lab-204');
+
       const setRes = await request(server, 'PUT', '/api/settings', {
         min_attendance_threshold: 80
       }, tokenA);
@@ -1544,7 +1973,129 @@ async function runAll() {
       assert.strictEqual(dsMatchesA.length, 1);
       assert.strictEqual(dsMatchesA[0].attended, 1);
 
-      // Clean up ds1 and dsUserB
+      // 2c. Edit credits and frequency_per_week, verify persistence & attendance preservation
+      const editDs = await request(server, 'PUT', `/api/subjects/${ds1.body.id}`, {
+        name: 'Data Science',
+        code: 'DS301',
+        credits: 4.5,
+        frequency_per_week: 5
+      }, tokenA);
+      assert.strictEqual(editDs.status, 200);
+      assert.strictEqual(Number(editDs.body.credits), 4.5);
+      assert.strictEqual(Number(editDs.body.frequency_per_week), 5);
+      assert.strictEqual(editDs.body.attended, 1);
+
+      const getDsAfterEdit = await request(server, 'GET', `/api/subjects/${ds1.body.id}`, null, tokenA);
+      assert.strictEqual(getDsAfterEdit.status, 200);
+      assert.strictEqual(Number(getDsAfterEdit.body.credits), 4.5);
+      assert.strictEqual(Number(getDsAfterEdit.body.frequency_per_week), 5);
+      assert.strictEqual(getDsAfterEdit.body.attended, 1);
+
+      const badCredits = await request(server, 'PUT', `/api/subjects/${ds1.body.id}`, {
+        credits: 25
+      }, tokenA);
+      assert.strictEqual(badCredits.status, 400);
+
+      // 2d. Soft-archive preserves attendance, deadlines, and timetable; explicit restore restores original ID
+      const dsDeadline = await request(server, 'POST', '/api/deadlines', {
+        title: 'DS Project',
+        subject_id: ds1.body.id,
+        category: 'project',
+        due_date: '2026-12-10'
+      }, tokenA);
+      assert.strictEqual(dsDeadline.status, 201);
+
+      const dsSlot = await request(server, 'POST', '/api/timetable', {
+        subject_id: ds1.body.id,
+        day_of_week: 3,
+        start_time: '14:00',
+        end_time: '15:30',
+        room: 'DS-Lab'
+      }, tokenA);
+      assert.strictEqual(dsSlot.status, 201);
+
+      const delDs1 = await request(server, 'DELETE', `/api/subjects/${ds1.body.id}`, null, tokenA);
+      assert.strictEqual(delDs1.status, 200);
+
+      // Archived subject cannot be fetched or edited as active
+      const getArchivedAsActive = await request(server, 'GET', `/api/subjects/${ds1.body.id}`, null, tokenA);
+      assert.strictEqual(getArchivedAsActive.status, 404);
+      const putArchived = await request(server, 'PUT', `/api/subjects/${ds1.body.id}`, { room: 'X' }, tokenA);
+      assert.strictEqual(putArchived.status, 404);
+
+      // Recreating a genuinely new subject succeeds (201) and does NOT auto-reassign archived records
+      const dsRecreated = await request(server, 'POST', '/api/subjects', {
+        name: 'Data Science',
+        code: 'DS301',
+        credits: 0,
+        frequency_per_week: 4
+      }, tokenA);
+      assert.strictEqual(dsRecreated.status, 201);
+      assert.strictEqual(Number(dsRecreated.body.credits), 0);
+      assert.strictEqual(dsRecreated.body.attended, 0);
+      assert.notStrictEqual(dsRecreated.body.id, ds1.body.id);
+
+      // Zero-credit subject persists on GET and can be archived to test multiple identical archived subjects
+      const getZeroCredit = await request(server, 'GET', `/api/subjects/${dsRecreated.body.id}`, null, tokenA);
+      assert.strictEqual(getZeroCredit.status, 200);
+      assert.strictEqual(Number(getZeroCredit.body.credits), 0);
+
+      // Cannot restore archived ds1 while active dsRecreated conflicts by name/code (409)
+      const restoreConflict = await request(server, 'POST', `/api/subjects/${ds1.body.id}/restore`, {}, tokenA);
+      assert.strictEqual(restoreConflict.status, 409);
+
+      // Archive dsRecreated too -> now two archived subjects share the same name/code
+      await request(server, 'DELETE', `/api/subjects/${dsRecreated.body.id}`, null, tokenA);
+      const archivedListA = await request(server, 'GET', '/api/subjects/archived', null, tokenA);
+      assert.strictEqual(archivedListA.status, 200);
+      assert.strictEqual(archivedListA.body.filter((s) => s.code === 'DS301').length, 2);
+
+      // User B cannot restore User A's archived subject
+      const restoreB = await request(server, 'POST', `/api/subjects/${ds1.body.id}/restore`, {}, tokenB);
+      assert.strictEqual(restoreB.status, 404);
+
+      // Restoration fails atomically (409) if an active timetable slot conflicts with an archived slot
+      const conflictingActiveSlot = await request(server, 'POST', '/api/timetable', {
+        subject_id: subjectId,
+        day_of_week: 3,
+        start_time: '14:30',
+        end_time: '16:00',
+        room: 'Conflict-Room'
+      }, tokenA);
+      assert.strictEqual(conflictingActiveSlot.status, 201);
+
+      const restoreTtConflict = await request(server, 'POST', `/api/subjects/${ds1.body.id}/restore`, {}, tokenA);
+      assert.strictEqual(restoreTtConflict.status, 409);
+
+      // Verify ds1 remains archived and dsSlot remains inactive (no partial restore)
+      const ds1StillArchived = await request(server, 'GET', `/api/subjects/${ds1.body.id}`, null, tokenA);
+      assert.strictEqual(ds1StillArchived.status, 404);
+      const ttDuringConflict = await request(server, 'GET', '/api/timetable', null, tokenA);
+      assert.strictEqual(ttDuringConflict.body.entries.some((e) => e.id === dsSlot.body.id), false);
+
+      // Remove the conflicting slot and retry restoration -> succeeds with original ID & records
+      await request(server, 'DELETE', `/api/timetable/${conflictingActiveSlot.body.id}`, null, tokenA);
+
+      // Explicitly restore ds1 by its original ID -> attendance, deadline, and timetable slot are all intact
+      const restoreDs1 = await request(server, 'POST', `/api/subjects/${ds1.body.id}/restore`, {}, tokenA);
+      assert.strictEqual(restoreDs1.status, 200);
+      assert.strictEqual(restoreDs1.body.id, ds1.body.id);
+      assert.strictEqual(restoreDs1.body.attended, 1);
+
+      const dlAfterRestore = await request(server, 'GET', '/api/deadlines', null, tokenA);
+      const restoredDl = dlAfterRestore.body.find((d) => d.id === dsDeadline.body.id);
+      assert(restoredDl);
+      assert.strictEqual(restoredDl.subject_id, ds1.body.id);
+      assert.strictEqual(restoredDl.subject_code, 'DS301');
+
+      const ttAfterRestore = await request(server, 'GET', '/api/timetable', null, tokenA);
+      const restoredSlot = ttAfterRestore.body.entries.find((e) => e.id === dsSlot.body.id);
+      assert(restoredSlot);
+      assert.strictEqual(restoredSlot.subject_id, ds1.body.id);
+
+      // Clean up test deadline, slot, archived subjects, and dsUserB
+      await request(server, 'DELETE', `/api/deadlines/${dsDeadline.body.id}`, null, tokenA);
+      await request(server, 'DELETE', `/api/timetable/${dsSlot.body.id}`, null, tokenA);
       await request(server, 'DELETE', `/api/subjects/${ds1.body.id}`, null, tokenA);
       await request(server, 'DELETE', `/api/subjects/${dsUserB.body.id}`, null, tokenB);
 

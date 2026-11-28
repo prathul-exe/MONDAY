@@ -5,6 +5,8 @@ const SubjectDetailComponent = {
   filter: 'all', // 'all' | 'present' | 'absent' | 'excused'
   subjectId: null,
   isSubmittingAttendance: false,
+  isUpdatingSubject: false,
+  isDeletingSubject: false,
 
   render(subjectId) {
     this.subjectId = subjectId;
@@ -99,6 +101,16 @@ const SubjectDetailComponent = {
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
+                <label class="font-label-tag text-label-tag uppercase text-on-surface-variant block mb-1">Credits</label>
+                <input id="es-credits" type="number" step="0.5" min="0" max="10" required class="w-full bg-surface-container-low rounded-lg p-2.5 text-on-surface">
+              </div>
+              <div>
+                <label class="font-label-tag text-label-tag uppercase text-on-surface-variant block mb-1">Classes/Wk</label>
+                <input id="es-freq" type="number" min="1" max="14" required class="w-full bg-surface-container-low rounded-lg p-2.5 text-on-surface">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
                 <label class="font-label-tag text-label-tag uppercase text-on-surface-variant block mb-1">Faculty</label>
                 <input id="es-faculty" class="w-full bg-surface-container-low rounded-lg p-2.5 text-on-surface">
               </div>
@@ -109,7 +121,7 @@ const SubjectDetailComponent = {
             </div>
             <div class="flex gap-2 pt-2">
               <button type="button" id="es-delete-btn" class="py-3 px-4 rounded-xl bg-error-container text-on-error-container font-label-tag uppercase font-semibold">Delete</button>
-              <button type="submit" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label-tag uppercase font-semibold">Save Changes</button>
+              <button type="submit" id="es-save-btn" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label-tag uppercase font-semibold">Save Changes</button>
             </div>
           </form>
         </div>
@@ -268,7 +280,7 @@ const SubjectDetailComponent = {
         <div class="grid grid-cols-3 gap-2 pt-2">
           <div class="bg-surface-container-low rounded-lg p-2.5 flex flex-col justify-center space-y-1">
             <span class="font-label-tag text-label-tag uppercase text-on-surface-variant block">Credits</span>
-            <span class="font-label-code text-body-lg font-bold text-on-surface">${s.credits || 3.0}</span>
+            <span class="font-label-code text-body-lg font-bold text-on-surface">${s.credits ?? 3.0}</span>
           </div>
           <div class="bg-surface-container-low rounded-lg p-2.5 flex flex-col justify-center space-y-1">
             <span class="font-label-tag text-label-tag uppercase text-on-surface-variant block">Frequency</span>
@@ -438,7 +450,9 @@ const SubjectDetailComponent = {
     if (!s) return;
     document.getElementById('es-name').value = s.name;
     document.getElementById('es-code').value = s.code;
-    document.getElementById('es-req').value = s.required_attendance || 75;
+    document.getElementById('es-req').value = s.required_attendance ?? 75;
+    document.getElementById('es-credits').value = s.credits ?? 3;
+    document.getElementById('es-freq').value = s.frequency_per_week ?? 3;
     document.getElementById('es-faculty').value = s.faculty_name || '';
     document.getElementById('es-room').value = s.room || '';
     const m = document.getElementById('edit-subject-modal');
@@ -497,11 +511,20 @@ const SubjectDetailComponent = {
 
     document.getElementById('edit-subj-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (this.isUpdatingSubject) return;
+      const saveBtn = document.getElementById('es-save-btn');
+      this.isUpdatingSubject = true;
+      if (saveBtn) saveBtn.disabled = true;
       try {
+        const rawReq = parseFloat(document.getElementById('es-req').value);
+        const rawCredits = parseFloat(document.getElementById('es-credits').value);
+        const rawFreq = parseInt(document.getElementById('es-freq').value, 10);
         await API.put(`/subjects/${this.subjectId}`, {
           name: document.getElementById('es-name').value.trim(),
           code: document.getElementById('es-code').value.trim().toUpperCase(),
-          required_attendance: parseFloat(document.getElementById('es-req').value) || 75,
+          required_attendance: Number.isFinite(rawReq) ? rawReq : 75,
+          credits: Number.isFinite(rawCredits) ? rawCredits : 3,
+          frequency_per_week: Number.isFinite(rawFreq) ? rawFreq : 3,
           faculty_name: document.getElementById('es-faculty').value.trim() || null,
           room: document.getElementById('es-room').value.trim() || null
         });
@@ -509,20 +532,30 @@ const SubjectDetailComponent = {
         closeEditSubj();
         await this.loadData();
       } catch (err) {
-        Helpers.showToast(err.message, 'error');
+        Helpers.showToast(err.message || 'Failed to update subject', 'error');
+      } finally {
+        this.isUpdatingSubject = false;
+        if (saveBtn) saveBtn.disabled = false;
       }
     });
 
     document.getElementById('es-delete-btn')?.addEventListener('click', async () => {
+      if (this.isDeletingSubject) return;
       const ok = await Helpers.confirm('Delete Subject', 'Delete this subject and all its attendance records?', 'Delete');
       if (!ok) return;
+      const deleteBtn = document.getElementById('es-delete-btn');
+      this.isDeletingSubject = true;
+      if (deleteBtn) deleteBtn.disabled = true;
       try {
         await API.delete(`/subjects/${this.subjectId}`);
         Helpers.showToast('Subject deleted');
         closeEditSubj();
         Router.navigate('dashboard');
       } catch (err) {
-        Helpers.showToast(err.message, 'error');
+        Helpers.showToast(err.message || 'Failed to delete subject', 'error');
+      } finally {
+        this.isDeletingSubject = false;
+        if (deleteBtn) deleteBtn.disabled = false;
       }
     });
   }

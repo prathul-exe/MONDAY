@@ -88,7 +88,7 @@ const DashboardComponent = {
             <div class="grid grid-cols-3 gap-2">
               <div>
                 <label class="block font-label-tag text-label-tag uppercase text-on-surface-variant mb-1">Credits</label>
-                <input id="subj-credits" type="number" step="0.5" min="1" max="10" value="4" class="w-full rounded-xl bg-surface-container-low px-3 py-2 text-on-surface focus:outline-none">
+                <input id="subj-credits" type="number" step="0.5" min="0" max="10" value="4" class="w-full rounded-xl bg-surface-container-low px-3 py-2 text-on-surface focus:outline-none">
               </div>
               <div>
                 <label class="block font-label-tag text-label-tag uppercase text-on-surface-variant mb-1">Classes/Wk</label>
@@ -104,6 +104,10 @@ const DashboardComponent = {
               <button type="submit" id="save-subject-btn" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label-tag uppercase tracking-wider font-semibold">Add Subject</button>
             </div>
           </form>
+          <div id="archived-subjects-restore-box" class="hidden pt-3 border-t border-surface-variant/40 space-y-2">
+            <span class="block font-label-tag text-label-tag uppercase text-on-surface-variant">Archived Subjects (Restore Original History)</span>
+            <div id="archived-subjects-list" class="space-y-2 max-h-40 overflow-y-auto"></div>
+          </div>
         </div>
       </div>
 
@@ -347,10 +351,52 @@ const DashboardComponent = {
     const closeSubj = document.getElementById('close-subject-modal');
     const cancelSubj = document.getElementById('cancel-subject-modal');
 
+    const loadArchivedSubjects = async () => {
+      const box = document.getElementById('archived-subjects-restore-box');
+      const list = document.getElementById('archived-subjects-list');
+      if (!box || !list) return;
+      try {
+        const archived = await API.get('/subjects/archived');
+        if (!Array.isArray(archived) || archived.length === 0) {
+          box.classList.add('hidden');
+          list.innerHTML = '';
+          return;
+        }
+        box.classList.remove('hidden');
+        list.innerHTML = archived.map(s => `
+          <div class="flex items-center justify-between gap-2 rounded-xl bg-surface-container-low px-3 py-2">
+            <div class="min-w-0">
+              <p class="font-headline-sm text-xs font-semibold text-on-surface truncate">${Helpers.escapeHtml(s.code)} — ${Helpers.escapeHtml(s.name)}</p>
+              <p class="font-body-sm text-[11px] text-on-surface-variant">${s.attended || 0}/${s.total || 0} classes recorded</p>
+            </div>
+            <button type="button" data-restore-subject="${s.id}" class="restore-subj-btn shrink-0 px-3 py-1.5 rounded-lg bg-secondary-container text-on-secondary-container font-label-tag text-[11px] font-semibold">Restore</button>
+          </div>
+        `).join('');
+        list.querySelectorAll('.restore-subj-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            try {
+              await API.post(`/subjects/${btn.dataset.restoreSubject}/restore`, {});
+              Helpers.showToast('Subject restored with original history!');
+              toggleSubjModal(false);
+              await this.loadDashboard();
+            } catch (err) {
+              Helpers.showToast(err.message || 'Failed to restore subject', 'error');
+              btn.disabled = false;
+            }
+          });
+        });
+      } catch (_) {
+        box.classList.add('hidden');
+      }
+    };
+
     const toggleSubjModal = (show) => {
       if (!subjModal) return;
       subjModal.classList.toggle('hidden', !show);
       subjModal.classList.toggle('flex', show);
+      if (show) loadArchivedSubjects();
     };
 
     openSubj?.addEventListener('click', () => toggleSubjModal(true));
@@ -365,13 +411,16 @@ const DashboardComponent = {
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving...';
       try {
+        const rawReq = parseFloat(document.getElementById('subj-req').value);
+        const rawCredits = parseFloat(document.getElementById('subj-credits').value);
+        const rawFreq = parseInt(document.getElementById('subj-freq').value, 10);
         await API.post('/subjects', {
           name: document.getElementById('subj-name').value.trim(),
           code: document.getElementById('subj-code').value.trim().toUpperCase(),
           faculty_name: document.getElementById('subj-faculty').value.trim() || null,
-          required_attendance: parseFloat(document.getElementById('subj-req').value) || 75,
-          credits: parseFloat(document.getElementById('subj-credits').value) || 3,
-          frequency_per_week: parseInt(document.getElementById('subj-freq').value) || 3,
+          required_attendance: Number.isFinite(rawReq) ? rawReq : 75,
+          credits: Number.isFinite(rawCredits) ? rawCredits : 3,
+          frequency_per_week: Number.isFinite(rawFreq) ? rawFreq : 3,
           room: document.getElementById('subj-room').value.trim() || null
         });
         Helpers.showToast('Subject added!');
