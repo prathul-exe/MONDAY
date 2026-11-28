@@ -2,13 +2,34 @@ const Router = {
     routes: {},
     currentRoute: null,
     _initialized: false,
+    _pendingNavigation: null,
+    _activeHash: null,
+
+    _normalizeHash(hash) {
+        return String(hash || '').replace(/^#/, '');
+    },
+
+    _hashFromUrl(url) {
+        if (!url) return '';
+        const idx = url.indexOf('#');
+        return idx === -1 ? '' : url.slice(idx + 1);
+    },
 
     init() {
         if (this._initialized) return;
         this._initialized = true;
-        window.addEventListener('hashchange', () => this.handleRoute());
-        // Also handle popstate for back/forward
-        window.addEventListener('popstate', () => this.handleRoute());
+        window.addEventListener('hashchange', (event) => {
+            const liveHash = this._normalizeHash(window.location.hash);
+            if (event && event.newURL !== undefined && this._hashFromUrl(event.newURL) !== liveHash) {
+                return;
+            }
+            let params = {};
+            if (this._pendingNavigation && this._pendingNavigation.hash === liveHash) {
+                params = this._pendingNavigation.params || {};
+                this._pendingNavigation = null;
+            }
+            this.handleRoute(params);
+        });
     },
 
     register(path, handler) {
@@ -16,13 +37,23 @@ const Router = {
     },
 
     navigate(path, params = {}) {
-        window.location.hash = path;
-        this.currentRoute = path;
-        this.handleRoute(params);
+        const target = this._normalizeHash(path);
+        const current = this._normalizeHash(window.location.hash);
+        this.currentRoute = target.split('/')[0] || 'dashboard';
+        if (current === target) {
+            this._pendingNavigation = null;
+            if (this._activeHash === target && Object.keys(params).length === 0) {
+                return;
+            }
+            this.handleRoute(params);
+            return;
+        }
+        this._pendingNavigation = { hash: target, params };
+        window.location.hash = target;
     },
 
     handleRoute(params = {}) {
-        const hash = window.location.hash.slice(1) || 'dashboard';
+        const hash = this._normalizeHash(window.location.hash) || 'dashboard';
         const [route, ...rest] = hash.split('/');
         const routeParams = rest.length > 0 ? { id: rest[0], ...params } : params;
 
@@ -33,9 +64,12 @@ const Router = {
 
         // Check auth
         if (!AuthService.isAuthenticated() && route !== 'login' && route !== 'register') {
+            this._activeHash = null;
             App.showOnboarding();
             return;
         }
+
+        this._activeHash = this._normalizeHash(window.location.hash) || 'dashboard';
 
         // Build page with header + content + nav
         let content = '';
@@ -71,9 +105,7 @@ const Router = {
 
     afterRender(callback) {
         requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                callback();
-            });
+            callback();
         });
     }
 };

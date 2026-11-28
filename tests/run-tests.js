@@ -670,6 +670,152 @@ async function runAll() {
     assert.strictEqual(requests[3].body.description, null);
   });
 
+  test('OnboardingComponent displays v1.0.0, password-recovery notices, and SVG arrows without raw icon text', () => {
+    const onboardingSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'onboarding.js'), 'utf8');
+    const navSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'navigation.js'), 'utf8');
+    const sandbox = {
+      document: { getElementById: () => null },
+      App: { currentUser: { full_name: 'Maya' } },
+      Helpers: { escapeHtml: (v) => String(v ?? '') },
+      AuthService: {},
+      API: {}
+    };
+    vm.runInNewContext(`${onboardingSource}\n${navSource}\nthis.OnboardingComponent = OnboardingComponent;\nthis.NavigationComponent = NavigationComponent;`, sandbox);
+    const { OnboardingComponent, NavigationComponent } = sandbox;
+
+    // Welcome screen: v1.0.0, SVG forward arrow, no raw arrow_forward
+    OnboardingComponent.view = 'welcome';
+    const welcomeHtml = OnboardingComponent.render();
+    assert(welcomeHtml.includes('v1.0.0'));
+    assert.strictEqual(welcomeHtml.includes('v2.4 Core'), false);
+    assert(welcomeHtml.includes('<svg aria-hidden="true"'));
+    assert.strictEqual(welcomeHtml.includes('arrow_forward'), false);
+
+    // Login screen: static forgot-password notice, no clickable Forgot button, SVG back arrow
+    OnboardingComponent.view = 'login';
+    const loginHtml = OnboardingComponent.render();
+    assert(loginHtml.includes('Forgot password? Password recovery is not available in this version. Please keep your password safe.'));
+    assert.strictEqual(loginHtml.includes('btn-forgot-pw'), false);
+    assert.strictEqual(loginHtml.includes('arrow_back'), false);
+
+    // Sign-up Page 2: password reminder notice, SVG arrows, no raw icon text
+    OnboardingComponent.view = 'register';
+    const registerHtml = OnboardingComponent.render();
+    assert(registerHtml.includes('Important: Password recovery is not available in this version. Please keep your password safe.'));
+    assert.strictEqual(registerHtml.includes('arrow_back'), false);
+    assert.strictEqual(registerHtml.includes('arrow_forward'), false);
+
+    // Navigation header back arrow uses SVG, not raw arrow_back text
+    const headerHtml = NavigationComponent.renderHeader('Subject Detail', true, true, true);
+    assert(headerHtml.includes('<svg aria-hidden="true"'));
+    assert.strictEqual(headerHtml.includes('arrow_back'), false);
+  });
+
+  await asyncTest('Router handles normal, Back/Forward, rapid, repeated, and parameterized navigation safely', async () => {
+    const routerSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'router.js'), 'utf8');
+    const listeners = {};
+    const historyStack = ['#dashboard'];
+    let historyIdx = 0;
+
+    const dispatchHashChange = (oldUrl, newUrl) => {
+      const event = { oldURL: oldUrl, newURL: newUrl };
+      (listeners.hashchange || []).forEach((fn) => fn(event));
+    };
+
+    const locationObj = {
+      _hash: '#dashboard',
+      get hash() { return this._hash; },
+      set hash(val) {
+        const next = val.startsWith('#') ? val : `#${val}`;
+        if (next === this._hash) return;
+        const oldUrl = `https://app.local/${this._hash}`;
+        const newUrl = `https://app.local/${next}`;
+        this._hash = next;
+        historyStack.splice(historyIdx + 1);
+        historyStack.push(next);
+        historyIdx = historyStack.length - 1;
+        queueMicrotask(() => dispatchHashChange(oldUrl, newUrl));
+      }
+    };
+
+    const simulateHistoryStep = (delta) => {
+      const targetIdx = historyIdx + delta;
+      const oldUrl = `https://app.local/${locationObj._hash}`;
+      historyIdx = targetIdx;
+      locationObj._hash = historyStack[targetIdx];
+      const newUrl = `https://app.local/${locationObj._hash}`;
+      dispatchHashChange(oldUrl, newUrl);
+    };
+
+    const handled = [];
+    const sandbox = {
+      window: {
+        location: locationObj,
+        addEventListener: (evt, fn) => {
+          listeners[evt] = listeners[evt] || [];
+          listeners[evt].push(fn);
+        }
+      },
+      document: { getElementById: () => ({ innerHTML: '' }) },
+      AuthService: { isAuthenticated: () => true },
+      DashboardComponent: { render: () => '<div>dash</div>', init: () => {} },
+      SubjectDetailComponent: { render: (id) => `<div>subj:${id}</div>`, init: () => {} },
+      DeadlinesComponent: { render: () => '<div>dl</div>', init: () => {} },
+      SettingsComponent: { render: () => '<div>settings</div>', init: () => {} },
+      requestAnimationFrame: (fn) => fn()
+    };
+    vm.runInNewContext(`${routerSource}\nthis.Router = Router;`, sandbox);
+    const { Router } = sandbox;
+
+    const origHandle = Router.handleRoute.bind(Router);
+    Router.handleRoute = (params = {}) => {
+      handled.push({ hash: locationObj.hash, params });
+      return origHandle(params);
+    };
+
+    Router.init();
+    Router.init();
+    assert.strictEqual((listeners.hashchange || []).length, 1);
+    assert.strictEqual((listeners.popstate || []).length, 0);
+
+    // 1. Normal navigation
+    Router.navigate('deadlines');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(handled.length, 1);
+    assert.strictEqual(handled[0].hash, '#deadlines');
+
+    // 2. Two consecutive calls to the same destination do not duplicate-render
+    Router.navigate('deadlines');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(handled.length, 1);
+
+    // 3. Browser Back and Forward
+    simulateHistoryStep(-1);
+    assert.strictEqual(handled.length, 2);
+    assert.strictEqual(handled[1].hash, '#dashboard');
+    simulateHistoryStep(1);
+    assert.strictEqual(handled.length, 3);
+    assert.strictEqual(handled[2].hash, '#deadlines');
+
+    // 4 & 5. Two rapid navigate() calls to different destinations deliver params only to the final destination
+    handled.length = 0;
+    Router.navigate('subject/sub-1', { from: 'stale' });
+    Router.navigate('settings', { section: 'profile' });
+    await new Promise((r) => setTimeout(r, 0));
+    assert.strictEqual(handled.length, 1);
+    assert.strictEqual(handled[0].hash, '#settings');
+    assert.strictEqual(JSON.stringify(handled[0].params), JSON.stringify({ section: 'profile' }));
+
+    // 6. Browser history change occurring while navigation is pending does not steal pending params
+    handled.length = 0;
+    Router._pendingNavigation = { hash: 'settings', params: { section: 'security' } };
+    simulateHistoryStep(-1); // history moves from #settings -> #subject/sub-1 while settings nav is pending
+    assert.strictEqual(handled.length, 1);
+    assert.strictEqual(handled[0].hash, '#subject/sub-1');
+    assert.strictEqual(JSON.stringify(handled[0].params), '{}');
+    assert.strictEqual(JSON.stringify(Router._pendingNavigation), JSON.stringify({ hash: 'settings', params: { section: 'security' } }));
+  });
+
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {
     assert.strictEqual(valuesMatch('2026-11-25 10:00:00', new Date('2026-11-25T10:00:00.000Z'), 'created_at', []), true);
     assert.strictEqual(valuesMatch(1, true, 'is_active', ['is_active']), true);

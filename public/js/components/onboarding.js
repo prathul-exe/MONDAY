@@ -1,10 +1,17 @@
 const OnboardingComponent = {
-  view: 'welcome', // 'welcome' | 'login' | 'register' | 'forgot'
+  view: 'welcome', // 'welcome' | 'login' | 'register'
+
+  arrowForwardSvg(cls = 'w-5 h-5') {
+    return `<svg aria-hidden="true" class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`;
+  },
+
+  arrowBackSvg(cls = 'w-[22px] h-[22px]') {
+    return `<svg aria-hidden="true" class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>`;
+  },
 
   render() {
     if (this.view === 'login') return this.renderLogin();
     if (this.view === 'register') return this.renderRegister();
-    if (this.view === 'forgot') return this.renderForgot();
     return this.renderWelcome();
   },
 
@@ -18,7 +25,7 @@ const OnboardingComponent = {
               <div class="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></div>
               <span class="font-headline-lg-mobile text-headline-lg-mobile font-semibold tracking-tighter text-on-surface">MONDAY<span class="text-secondary font-bold">.</span></span>
             </div>
-            <span class="font-label-tag text-label-tag uppercase tracking-widest px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-medium">v2.4 Core</span>
+            <span class="font-label-tag text-label-tag uppercase tracking-widest px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-medium">v1.0.0</span>
           </div>
 
           <!-- Hero Typography Section -->
@@ -55,7 +62,7 @@ const OnboardingComponent = {
           <div class="flex flex-col gap-3 mt-auto">
             <button id="btn-get-started" class="w-full bg-primary text-on-primary py-4 px-6 rounded-full font-headline-sm text-headline-sm font-semibold flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all hover:bg-neutral-800" type="button">
               <span>Get Started</span>
-              <span class="material-symbols-outlined text-xl">arrow_forward</span>
+              ${this.arrowForwardSvg('w-5 h-5')}
             </button>
             <button id="btn-go-signin" class="w-full py-3 px-6 rounded-full bg-transparent text-on-surface font-body-md text-body-md font-medium text-center hover:bg-surface-container-low transition-colors active:scale-[0.99]" type="button">
               Already have an account? <span class="font-semibold underline decoration-outline-variant underline-offset-4">Sign In</span>
@@ -76,8 +83,8 @@ const OnboardingComponent = {
     return `
       <main class="flex-1 flex flex-col relative w-full max-w-lg mx-auto px-gutter bg-surface py-6 min-h-screen">
         <div class="flex items-center justify-between mb-6">
-          <button id="btn-back-welcome" class="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors" type="button">
-            <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+          <button id="btn-back-welcome" aria-label="Back to welcome" class="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors" type="button">
+            ${this.arrowBackSvg('w-[22px] h-[22px]')}
           </button>
           <span class="font-headline-sm text-headline-sm font-semibold tracking-tighter text-on-surface">MONDAY<span class="text-secondary font-bold">.</span></span>
           <div class="w-10"></div>
@@ -108,8 +115,10 @@ const OnboardingComponent = {
             </div>
           </div>
 
-          <div class="flex justify-end">
-            <button type="button" id="btn-forgot-pw" class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface underline underline-offset-4">Forgot Password?</button>
+          <div class="rounded-xl bg-surface-container-low px-3.5 py-2.5 border border-surface-variant/60">
+            <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              Forgot password? Password recovery is not available in this version. Please keep your password safe.
+            </p>
           </div>
 
           <div class="mt-auto pt-4 flex flex-col gap-3">
@@ -130,8 +139,8 @@ const OnboardingComponent = {
     return `
       <main class="flex-1 flex flex-col relative w-full max-w-lg mx-auto px-gutter bg-surface py-6 min-h-screen">
         <div class="flex items-center justify-between mb-5">
-          <button id="btn-back-welcome" class="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors" type="button">
-            <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+          <button id="btn-back-welcome" aria-label="Back to welcome" class="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors" type="button">
+            ${this.arrowBackSvg('w-[22px] h-[22px]')}
           </button>
           <span class="font-headline-sm text-headline-sm font-semibold tracking-tighter text-on-surface">MONDAY<span class="text-secondary font-bold">.</span></span>
           <div class="w-10"></div>
@@ -163,6 +172,12 @@ const OnboardingComponent = {
               class="w-full rounded-xl bg-surface-container-low px-4 py-3 text-on-surface placeholder:text-outline-variant border border-transparent focus:border-[#8FAFC9] focus:outline-none">
           </div>
 
+          <div class="rounded-xl bg-surface-container-low px-3.5 py-2.5 border border-surface-variant/60">
+            <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              Important: Password recovery is not available in this version. Please keep your password safe.
+            </p>
+          </div>
+
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block font-label-tag text-label-tag uppercase text-on-surface-variant mb-1" for="reg-student-id">Student ID (Opt)</label>
@@ -186,36 +201,12 @@ const OnboardingComponent = {
           <div class="mt-auto pt-3 flex flex-col gap-3">
             <button id="register-submit-btn" type="submit" class="w-full bg-primary text-on-primary py-4 px-6 rounded-full font-headline-sm text-headline-sm font-semibold flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all">
               <span>Create Account</span>
-              <span class="material-symbols-outlined text-xl">arrow_forward</span>
+              ${this.arrowForwardSvg('w-5 h-5')}
             </button>
             <button type="button" id="btn-switch-login" class="w-full py-2.5 px-6 rounded-full text-on-surface font-body-md text-body-md font-medium text-center hover:bg-surface-container-low transition-colors">
               Already have an account? <span class="font-semibold underline decoration-outline-variant underline-offset-4">Sign In</span>
             </button>
           </div>
-        </form>
-      </main>
-    `;
-  },
-
-  renderForgot() {
-    return `
-      <main class="flex-1 flex flex-col relative w-full max-w-lg mx-auto px-gutter bg-surface py-6 min-h-screen">
-        <div class="flex items-center justify-between mb-6">
-          <button id="btn-back-login" class="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors" type="button">
-            <span class="material-symbols-outlined text-[22px]">arrow_back</span>
-          </button>
-          <span class="font-headline-sm text-headline-sm font-semibold tracking-tighter text-on-surface">MONDAY<span class="text-secondary font-bold">.</span></span>
-          <div class="w-10"></div>
-        </div>
-        <h1 class="font-headline-lg-mobile text-headline-lg-mobile font-semibold text-on-surface mb-2">Reset Password</h1>
-        <p class="font-body-md text-body-md text-on-surface-variant mb-6">Enter your email address to request password recovery.</p>
-        <form id="forgot-form" class="flex flex-col gap-4">
-          <div id="forgot-feedback" class="hidden p-3 rounded-xl bg-secondary-container text-on-secondary-container font-body-sm text-body-sm"></div>
-          <input id="forgot-email" type="email" required placeholder="student@university.edu"
-            class="w-full rounded-xl bg-surface-container-low px-4 py-3 text-on-surface placeholder:text-outline-variant border border-transparent focus:border-[#8FAFC9] focus:outline-none">
-          <button type="submit" class="w-full bg-primary text-on-primary py-3.5 px-6 rounded-full font-headline-sm font-semibold active:scale-[0.98] transition-all">
-            Send Reset Instructions
-          </button>
         </form>
       </main>
     `;
@@ -247,14 +238,6 @@ const OnboardingComponent = {
       this.rerender();
     });
     document.getElementById('btn-switch-login')?.addEventListener('click', () => {
-      this.view = 'login';
-      this.rerender();
-    });
-    document.getElementById('btn-forgot-pw')?.addEventListener('click', () => {
-      this.view = 'forgot';
-      this.rerender();
-    });
-    document.getElementById('btn-back-login')?.addEventListener('click', () => {
       this.view = 'login';
       this.rerender();
     });
@@ -316,23 +299,7 @@ const OnboardingComponent = {
           errEl.textContent = err.message || 'Registration failed';
           errEl.classList.remove('hidden');
           btn.disabled = false;
-          btn.innerHTML = '<span>Create Account</span><span class="material-symbols-outlined text-xl">arrow_forward</span>';
-        }
-      });
-    }
-
-    const forgotForm = document.getElementById('forgot-form');
-    if (forgotForm) {
-      forgotForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fb = document.getElementById('forgot-feedback');
-        try {
-          const email = document.getElementById('forgot-email').value.trim();
-          const res = await API.post('/auth/forgot-password', { email });
-          fb.textContent = res.message;
-          fb.classList.remove('hidden');
-        } catch (err) {
-          Helpers.showToast(err.message, 'error');
+          btn.innerHTML = `<span>Create Account</span>${this.arrowForwardSvg('w-5 h-5')}`;
         }
       });
     }

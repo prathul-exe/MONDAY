@@ -33,8 +33,8 @@ const NavigationComponent = {
                 <div class="h-16 px-gutter flex items-center justify-between w-full">
                     <div class="flex items-center gap-space-sm">
                         ${showBack ? `
-                            <button onclick="history.back()" class="w-11 h-11 -ml-2 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-high transition-colors focus:outline-none">
-                                <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+                            <button onclick="history.back()" aria-label="Go back" class="w-11 h-11 -ml-2 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-high transition-colors focus:outline-none">
+                                <svg aria-hidden="true" class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
                             </button>
                         ` : ''}
                         <div class="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></div>
