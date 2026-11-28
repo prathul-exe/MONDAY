@@ -53,21 +53,49 @@ router.post('/', [
     const id = uuidv4();
     const {
       title, description, subject_id, category,
-      due_date, due_time, grade_weight, platform, reminder_before
+      due_date, due_time, platform, reminder_before
     } = req.body;
+
+    const normalizedCategory = category || 'assignment';
+    const normalizedDueTime = due_time || '23:59';
+    const normalizedDescription = description ? String(description).trim() : null;
+
+    if (normalizedCategory === 'custom' && !normalizedDescription) {
+      return res.status(400).json({ error: 'Custom task name is required' });
+    }
 
     if (subject_id) {
       const subj = await db.get('SELECT id FROM subjects WHERE id = ? AND user_id = ?', subject_id, req.user.id);
       if (!subj) return res.status(404).json({ error: 'Subject not found' });
     }
 
+    const dupParams = [req.user.id, title, due_date, normalizedDueTime, normalizedCategory];
+    let dupQuery = `
+      SELECT id FROM deadlines
+      WHERE user_id = ?
+        AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+        AND due_date = ?
+        AND COALESCE(due_time, '23:59') = ?
+        AND category = ?
+    `;
+    if (subject_id) {
+      dupQuery += ' AND subject_id = ?';
+      dupParams.push(subject_id);
+    } else {
+      dupQuery += ' AND subject_id IS NULL';
+    }
+    const existingDup = await db.get(dupQuery, ...dupParams);
+    if (existingDup) {
+      return res.status(409).json({ error: 'A task with this title and due date already exists' });
+    }
+
     await db.run(`
-      INSERT INTO deadlines (id, user_id, subject_id, title, description, category, due_date, due_time, grade_weight, platform, reminder_before)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO deadlines (id, user_id, subject_id, title, description, category, due_date, due_time, platform, reminder_before)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-      id, req.user.id, subject_id || null, title, description || null,
-      category || 'assignment', due_date, due_time || '23:59',
-      grade_weight || 0, platform || null, reminder_before || null
+      id, req.user.id, subject_id || null, title, normalizedDescription,
+      normalizedCategory, due_date, normalizedDueTime,
+      platform || null, reminder_before || null
     );
 
     const created = await db.get(`
@@ -91,7 +119,13 @@ router.put('/:id', async (req, res) => {
     const existing = await db.get('SELECT * FROM deadlines WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
     if (!existing) return res.status(404).json({ error: 'Deadline not found' });
 
-    const { title, description, subject_id, category, due_date, due_time, grade_weight, platform, reminder_before } = req.body;
+    const { title, description, subject_id, category, due_date, due_time, platform, reminder_before } = req.body;
+
+    const nextCategory = category !== undefined ? category : existing.category;
+    const nextDescription = description !== undefined ? (description ? String(description).trim() : null) : existing.description;
+    if (nextCategory === 'custom' && !nextDescription) {
+      return res.status(400).json({ error: 'Custom task name is required' });
+    }
 
     if (subject_id) {
       const subj = await db.get('SELECT id FROM subjects WHERE id = ? AND user_id = ?', subject_id, req.user.id);
@@ -101,17 +135,16 @@ router.put('/:id', async (req, res) => {
     await db.run(`
       UPDATE deadlines SET
         title = COALESCE(?, title),
-        description = COALESCE(?, description),
+        description = ?,
         subject_id = COALESCE(?, subject_id),
         category = COALESCE(?, category),
         due_date = COALESCE(?, due_date),
         due_time = COALESCE(?, due_time),
-        grade_weight = COALESCE(?, grade_weight),
         platform = COALESCE(?, platform),
         reminder_before = COALESCE(?, reminder_before),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?
-    `, title, description, subject_id, category, emptyToNull(due_date), emptyToNull(due_time), emptyToNull(grade_weight), platform, reminder_before, req.params.id, req.user.id);
+    `, title, nextDescription, subject_id, category, emptyToNull(due_date), emptyToNull(due_time), platform, reminder_before, req.params.id, req.user.id);
 
     const updated = await db.get(`
       SELECT d.*, s.name as subject_name, s.code as subject_code

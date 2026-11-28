@@ -491,6 +491,182 @@ async function runAll() {
     assert.strictEqual(elements['att-modal-save'].disabled, false);
   });
 
+  await asyncTest('DeadlinesComponent deduplicates renders, locks rapid submits, supports custom tasks/editing, and omits grade %', async () => {
+    const dlSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'components', 'deadlines.js'), 'utf8');
+    const makeClassList = (initial = []) => {
+      const set = new Set(initial);
+      return {
+        add: (...cls) => cls.forEach((c) => set.add(c)),
+        remove: (...cls) => cls.forEach((c) => set.delete(c)),
+        toggle: (c, force) => (force === undefined ? (set.has(c) ? set.delete(c) : set.add(c)) : (force ? set.add(c) : set.delete(c))),
+        contains: (c) => set.has(c)
+      };
+    };
+    const catButtons = ['assignment', 'custom'].map((cat) => {
+      const listeners = {};
+      return {
+        dataset: { cat },
+        classList: makeClassList(cat === 'assignment' ? ['bg-secondary-container'] : []),
+        addEventListener(evt, fn) { listeners[evt] = fn; },
+        click() { return listeners.click?.(); }
+      };
+    });
+    const elements = {
+      'deadlines-content': { innerHTML: '', querySelectorAll: () => [] },
+      'add-task-modal': { classList: makeClassList(['hidden']) },
+      'dl-modal-title': { textContent: '' },
+      'dl-submit-label': { textContent: '' },
+      'dl-submit-btn': { disabled: false },
+      'dl-title': { value: '' },
+      'dl-subject': { value: '' },
+      'dl-date': { value: '2026-12-01' },
+      'dl-time': { value: '23:59' },
+      'dl-platform': { value: 'Moodle Portal' },
+      'dl-custom-name-wrap': { classList: makeClassList(['hidden']) },
+      'dl-custom-name': { value: '', focus: () => {} },
+      'dl-create-form': {
+        listeners: {},
+        reset() {},
+        addEventListener(evt, fn) { this.listeners[evt] = fn; }
+      }
+    };
+    const toasts = [];
+    const requests = [];
+    let resolvePending;
+
+    const sandbox = {
+      document: {
+        getElementById: (id) => elements[id] || null,
+        querySelectorAll: (sel) => (sel === '.dl-cat-btn' ? catButtons : [])
+      },
+      NavigationComponent: { renderHeader: () => '', renderDock: () => '' },
+      Helpers: {
+        escapeHtml: (v) => String(v ?? ''),
+        loadingSpinner: () => '',
+        formatDateShort: (d) => d,
+        formatTime: (t) => t || '23:59',
+        showToast: (msg, type = 'success') => toasts.push({ msg, type })
+      },
+      API: {
+        post: (url, body) => {
+          requests.push({ method: 'POST', url, body });
+          return new Promise((resolve) => { resolvePending = resolve; });
+        },
+        put: (url, body) => {
+          requests.push({ method: 'PUT', url, body });
+          return Promise.resolve({ id: 'dl-1', ...body });
+        }
+      }
+    };
+    vm.runInNewContext(`${dlSource}\nthis.DeadlinesComponent = DeadlinesComponent;`, sandbox);
+    const { DeadlinesComponent } = sandbox;
+    DeadlinesComponent.loadData = async () => {};
+
+    // 7. Grade percentage UI removed from modal and cards
+    const renderedModal = DeadlinesComponent.render();
+    assert.strictEqual(renderedModal.includes('dl-weight'), false);
+    assert.strictEqual(renderedModal.includes('Grade %'), false);
+    const cardHtml = DeadlinesComponent.renderCard({
+      id: 'dl-card-1',
+      title: 'Seminar Talk',
+      category: 'custom',
+      description: 'Viva',
+      due_date: '2026-12-01',
+      due_time: '10:00',
+      grade_weight: 25,
+      platform: 'In-Person / Hall'
+    }, false);
+    assert(cardHtml.includes('Viva'));
+    assert.strictEqual(cardHtml.includes('25% Weight'), false);
+
+    // 2. Duplicate rendering prevention
+    DeadlinesComponent.deadlines = [
+      { id: 'dl-dup', title: 'Lab 1', category: 'assignment', due_date: '2026-12-01', is_completed: 0 },
+      { id: 'dl-dup', title: 'Lab 1', category: 'assignment', due_date: '2026-12-01', is_completed: 0 }
+    ];
+    DeadlinesComponent.renderList();
+    assert.strictEqual((elements['deadlines-content'].innerHTML.match(/Lab 1/g) || []).length, 1);
+
+    // 3 & 4. Custom button toggles input and rejects empty custom task name
+    DeadlinesComponent.attachEvents();
+    catButtons[1].click();
+    assert.strictEqual(elements['dl-custom-name-wrap'].classList.contains('hidden'), false);
+    elements['dl-title'].value = 'Oral Defense';
+    elements['dl-custom-name'].value = '   ';
+    await elements['dl-create-form'].listeners.submit({ preventDefault: () => {}, target: elements['dl-create-form'] });
+    assert.strictEqual(requests.length, 0);
+    assert(toasts.some((t) => t.type === 'error' && t.msg.includes('custom task name')));
+
+    // 1 & 3. Valid custom task submit + rapid duplicate submit lock
+    elements['dl-custom-name'].value = 'Viva';
+    const submitEvt = { preventDefault: () => {}, target: elements['dl-create-form'] };
+    const firstSubmit = elements['dl-create-form'].listeners.submit(submitEvt);
+    await elements['dl-create-form'].listeners.submit(submitEvt);
+    assert.strictEqual(requests.length, 1);
+    assert.strictEqual(requests[0].body.category, 'custom');
+    assert.strictEqual(requests[0].body.description, 'Viva');
+    assert.strictEqual('grade_weight' in requests[0].body, false);
+    assert.strictEqual(elements['dl-submit-btn'].disabled, true);
+    resolvePending({ id: 'dl-1' });
+    await firstSubmit;
+    assert.strictEqual(DeadlinesComponent.isSubmitting, false);
+    assert.strictEqual(elements['dl-submit-btn'].disabled, false);
+
+    // 5. Editing an existing custom task pre-fills custom name and calls PUT
+    DeadlinesComponent.openModal({
+      id: 'dl-1',
+      title: 'Oral Defense',
+      subject_id: '',
+      category: 'custom',
+      description: 'Viva',
+      due_date: '2026-12-01',
+      due_time: '14:00',
+      platform: 'In-Person / Hall'
+    });
+    assert.strictEqual(elements['dl-custom-name-wrap'].classList.contains('hidden'), false);
+    assert.strictEqual(elements['dl-custom-name'].value, 'Viva');
+    elements['dl-custom-name'].value = 'Thesis Viva';
+    await elements['dl-create-form'].listeners.submit(submitEvt);
+    assert.strictEqual(requests[1].method, 'PUT');
+    assert.strictEqual(requests[1].url, '/deadlines/dl-1');
+    assert.strictEqual(requests[1].body.description, 'Thesis Viva');
+
+    // 5b. Editing a predefined task omits description so existing DB description is preserved
+    DeadlinesComponent.openModal({
+      id: 'dl-pre-1',
+      title: 'Midterm Study',
+      subject_id: '',
+      category: 'assignment',
+      description: 'Chapters 1-4',
+      due_date: '2026-12-03',
+      due_time: '18:00',
+      platform: 'Moodle Portal'
+    });
+    elements['dl-title'].value = 'Midterm Study Revised';
+    await elements['dl-create-form'].listeners.submit(submitEvt);
+    assert.strictEqual(requests[2].method, 'PUT');
+    assert.strictEqual(requests[2].url, '/deadlines/dl-pre-1');
+    assert.strictEqual('description' in requests[2].body, false);
+
+    // 5c. Switching a Custom task to a predefined category sends description: null to clear old custom name
+    DeadlinesComponent.openModal({
+      id: 'dl-custom-to-pre',
+      title: 'Seminar',
+      subject_id: '',
+      category: 'custom',
+      description: 'Viva',
+      due_date: '2026-12-04',
+      due_time: '12:00',
+      platform: 'In-Person / Hall'
+    });
+    catButtons[0].click(); // switch from custom -> assignment
+    await elements['dl-create-form'].listeners.submit(submitEvt);
+    assert.strictEqual(requests[3].method, 'PUT');
+    assert.strictEqual(requests[3].url, '/deadlines/dl-custom-to-pre');
+    assert.strictEqual(requests[3].body.category, 'assignment');
+    assert.strictEqual(requests[3].body.description, null);
+  });
+
   await asyncTest('Migration script dry-run, verification, and conflict detection work with mocks', async () => {
     assert.strictEqual(valuesMatch('2026-11-25 10:00:00', new Date('2026-11-25T10:00:00.000Z'), 'created_at', []), true);
     assert.strictEqual(valuesMatch(1, true, 'is_active', ['is_active']), true);
@@ -796,6 +972,76 @@ async function runAll() {
       }, tokenA);
       assert.strictEqual(createRes.status, 201);
       deadlineId = createRes.body.id;
+
+      // Duplicate task submission returns 409
+      const dupTaskRes = await request(server, 'POST', '/api/deadlines', {
+        title: 'midterm exam',
+        subject_id: subjectId,
+        category: 'exam_quiz',
+        due_date: '2026-12-01'
+      }, tokenA);
+      assert.strictEqual(dupTaskRes.status, 409);
+
+      // Empty custom task name is rejected with 400
+      const emptyCustomRes = await request(server, 'POST', '/api/deadlines', {
+        title: 'Oral Review',
+        category: 'custom',
+        description: '   ',
+        due_date: '2026-12-02'
+      }, tokenA);
+      assert.strictEqual(emptyCustomRes.status, 400);
+
+      // Valid custom task creation and editing preserves task fields
+      const customRes = await request(server, 'POST', '/api/deadlines', {
+        title: 'Oral Review',
+        subject_id: subjectId,
+        category: 'custom',
+        description: 'Viva',
+        due_date: '2026-12-02',
+        due_time: '15:00'
+      }, tokenA);
+      assert.strictEqual(customRes.status, 201);
+      assert.strictEqual(customRes.body.category, 'custom');
+      assert.strictEqual(customRes.body.description, 'Viva');
+
+      const editCustomRes = await request(server, 'PUT', `/api/deadlines/${customRes.body.id}`, {
+        title: 'Oral Review Updated',
+        category: 'custom',
+        description: 'Final Viva'
+      }, tokenA);
+      assert.strictEqual(editCustomRes.status, 200);
+      assert.strictEqual(editCustomRes.body.description, 'Final Viva');
+      assert.strictEqual(editCustomRes.body.due_date, '2026-12-02');
+      assert.strictEqual(editCustomRes.body.subject_id, subjectId);
+
+      // Switching custom task to predefined category clears old custom name
+      const clearCustomRes = await request(server, 'PUT', `/api/deadlines/${customRes.body.id}`, {
+        category: 'assignment',
+        description: null
+      }, tokenA);
+      assert.strictEqual(clearCustomRes.status, 200);
+      assert.strictEqual(clearCustomRes.body.category, 'assignment');
+      assert.strictEqual(clearCustomRes.body.description, null);
+
+      const delCustomRes = await request(server, 'DELETE', `/api/deadlines/${customRes.body.id}`, null, tokenA);
+      assert.strictEqual(delCustomRes.status, 200);
+
+      // Editing predefined task without description preserves existing description
+      const preWithDesc = await request(server, 'POST', '/api/deadlines', {
+        title: 'Lab Notes',
+        subject_id: subjectId,
+        category: 'tp_lab',
+        description: 'Bring safety goggles',
+        due_date: '2026-12-05'
+      }, tokenA);
+      assert.strictEqual(preWithDesc.status, 201);
+      const preEdited = await request(server, 'PUT', `/api/deadlines/${preWithDesc.body.id}`, {
+        title: 'Lab Notes Updated',
+        category: 'tp_lab'
+      }, tokenA);
+      assert.strictEqual(preEdited.status, 200);
+      assert.strictEqual(preEdited.body.description, 'Bring safety goggles');
+      await request(server, 'DELETE', `/api/deadlines/${preWithDesc.body.id}`, null, tokenA);
 
       const compRes = await request(server, 'PUT', `/api/deadlines/${deadlineId}/complete`, {}, tokenA);
       assert.strictEqual(compRes.status, 200);

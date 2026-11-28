@@ -4,6 +4,11 @@ const DeadlinesComponent = {
   selectedCourseId: '',
   selectedCategory: 'assignment',
   selectedPlatform: 'Moodle Portal',
+  editingDeadlineId: null,
+  editingOriginalCategory: null,
+  isSubmitting: false,
+  isTogglingId: null,
+  isDeletingId: null,
 
   render() {
     return `
@@ -30,7 +35,7 @@ const DeadlinesComponent = {
             <div class="flex items-center justify-between">
               <div>
                 <span class="font-label-tag text-label-tag text-secondary uppercase tracking-widest font-semibold">Academic Horizon</span>
-                <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface tracking-tight mt-0.5">New Deliverable</h2>
+                <h2 id="dl-modal-title" class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface tracking-tight mt-0.5">New Deliverable</h2>
               </div>
               <button id="dl-discard-btn" class="px-space-md py-space-xs rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm font-medium flex items-center gap-1">
                 <span class="material-symbols-outlined text-[16px]">close</span><span>Discard</span>
@@ -71,6 +76,12 @@ const DeadlinesComponent = {
               </div>
             </div>
 
+            <div id="dl-custom-name-wrap" class="hidden bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+              <label class="block font-label-tag text-label-tag text-on-surface-variant uppercase tracking-wider mb-1">Custom Task Type *</label>
+              <input id="dl-custom-name" type="text" placeholder="e.g., Viva, Presentation, Workshop"
+                class="w-full bg-transparent font-body-md text-on-surface placeholder:text-outline-variant focus:outline-none">
+            </div>
+
             <div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm grid grid-cols-2 gap-3">
               <div>
                 <label class="font-label-tag text-label-tag text-on-surface-variant uppercase block mb-1">Due Date *</label>
@@ -82,25 +93,19 @@ const DeadlinesComponent = {
               </div>
             </div>
 
-            <div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between gap-3">
-              <div>
-                <span class="font-label-tag text-label-tag text-on-surface-variant uppercase block">Platform</span>
-                <select id="dl-platform" class="bg-transparent font-label-code text-sm text-on-surface focus:outline-none mt-0.5">
-                  <option value="Moodle Portal">Moodle Portal</option>
-                  <option value="Canvas LMS">Canvas LMS</option>
-                  <option value="Direct PDF Upload">Direct PDF Upload</option>
-                  <option value="In-Person / Hall">In-Person / Hall</option>
-                </select>
-              </div>
-              <div class="text-right">
-                <span class="font-label-tag text-label-tag text-on-surface-variant uppercase block">Grade %</span>
-                <input id="dl-weight" type="number" min="0" max="100" value="10" class="w-16 text-right bg-surface-container-low rounded-lg px-2 py-1 font-label-code text-sm text-on-surface">
-              </div>
+            <div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+              <span class="font-label-tag text-label-tag text-on-surface-variant uppercase block">Platform</span>
+              <select id="dl-platform" class="w-full bg-transparent font-label-code text-sm text-on-surface focus:outline-none mt-0.5">
+                <option value="Moodle Portal">Moodle Portal</option>
+                <option value="Canvas LMS">Canvas LMS</option>
+                <option value="Direct PDF Upload">Direct PDF Upload</option>
+                <option value="In-Person / Hall">In-Person / Hall</option>
+              </select>
             </div>
 
             <button type="submit" id="dl-submit-btn" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-code font-semibold tracking-wide uppercase flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-all">
               <span class="material-symbols-outlined text-[20px]">check_circle</span>
-              <span>Schedule Deliverable</span>
+              <span id="dl-submit-label">Schedule Deliverable</span>
             </button>
           </form>
         </div>
@@ -140,10 +145,17 @@ const DeadlinesComponent = {
     const container = document.getElementById('deadlines-content');
     if (!container) return;
 
-    const pending = this.deadlines.filter(d => !d.is_completed);
-    const completed = this.deadlines.filter(d => d.is_completed);
+    const seenIds = new Set();
+    const uniqueDeadlines = (this.deadlines || []).filter(d => {
+      if (!d || !d.id || seenIds.has(d.id)) return false;
+      seenIds.add(d.id);
+      return true;
+    });
 
-    if (this.deadlines.length === 0) {
+    const pending = uniqueDeadlines.filter(d => !d.is_completed);
+    const completed = uniqueDeadlines.filter(d => d.is_completed);
+
+    if (uniqueDeadlines.length === 0) {
       container.innerHTML = `
         <div class="bg-surface-container-lowest rounded-xl p-8 text-center shadow-sm space-y-2">
           <span class="material-symbols-outlined text-4xl text-outline-variant">assignment</span>
@@ -176,27 +188,47 @@ const DeadlinesComponent = {
     container.querySelectorAll('.toggle-dl-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.dlId;
+        if (this.isTogglingId === id) return;
         const done = btn.dataset.done === '1';
+        this.isTogglingId = id;
+        btn.disabled = true;
         try {
           await API.put(`/deadlines/${id}/${done ? 'uncomplete' : 'complete'}`, {});
           Helpers.showToast(done ? 'Reopened task' : 'Task completed!');
           await this.loadData();
         } catch (err) {
           Helpers.showToast(err.message, 'error');
+        } finally {
+          this.isTogglingId = null;
+          btn.disabled = false;
         }
+      });
+    });
+
+    container.querySelectorAll('.edit-dl-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = this.deadlines.find(d => d.id === btn.dataset.dlId);
+        if (item && this.openModal) this.openModal(item);
       });
     });
 
     container.querySelectorAll('.del-dl-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        const id = btn.dataset.dlId;
+        if (this.isDeletingId === id) return;
         const ok = await Helpers.confirm('Delete Deadline', 'Remove this deadline?', 'Delete');
         if (!ok) return;
+        this.isDeletingId = id;
+        btn.disabled = true;
         try {
-          await API.delete(`/deadlines/${btn.dataset.dlId}`);
+          await API.delete(`/deadlines/${id}`);
           Helpers.showToast('Deadline deleted');
           await this.loadData();
         } catch (err) {
           Helpers.showToast(err.message, 'error');
+        } finally {
+          this.isDeletingId = null;
+          btn.disabled = false;
         }
       });
     });
@@ -211,22 +243,30 @@ const DeadlinesComponent = {
       reading: 'Reading',
       custom: 'Custom'
     };
+    const categoryLabel = d.category === 'custom'
+      ? Helpers.escapeHtml(d.description || 'Custom')
+      : (catLabels[d.category] || 'Task');
     return `
       <div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-3 ${isDone ? 'opacity-65' : ''}">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-center gap-2 flex-wrap min-w-0">
             ${d.subject_code ? `<span class="font-label-code text-label-code text-on-surface bg-surface-container px-2 py-0.5 rounded">${Helpers.escapeHtml(d.subject_code)}</span>` : ''}
-            <span class="px-2 py-0.5 rounded-full bg-[#E89A68]/15 text-[#925B1D] font-label-tag text-label-tag">${catLabels[d.category] || 'Task'}</span>
+            <span class="px-2 py-0.5 rounded-full bg-[#E89A68]/15 text-[#925B1D] font-label-tag text-label-tag">${categoryLabel}</span>
           </div>
-          <button data-dl-id="${d.id}" class="del-dl-btn text-outline hover:text-error p-1" title="Delete">
-            <span class="material-symbols-outlined text-[16px]">delete</span>
-          </button>
+          <div class="flex items-center gap-1">
+            <button data-dl-id="${d.id}" class="edit-dl-btn text-outline hover:text-primary p-1" title="Edit">
+              <span class="material-symbols-outlined text-[16px]">edit</span>
+            </button>
+            <button data-dl-id="${d.id}" class="del-dl-btn text-outline hover:text-error p-1" title="Delete">
+              <span class="material-symbols-outlined text-[16px]">delete</span>
+            </button>
+          </div>
         </div>
         <div>
           <h3 class="font-headline-sm text-headline-sm text-on-surface leading-snug ${isDone ? 'line-through' : ''}">${Helpers.escapeHtml(d.title)}</h3>
           <p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5 mt-1">
             <span class="material-symbols-outlined text-[15px]">schedule</span>
-            <span>${Helpers.formatDateShort(d.due_date)} • ${Helpers.formatTime(d.due_time)}${d.grade_weight ? ` • ${d.grade_weight}% Weight` : ''}</span>
+            <span>${Helpers.formatDateShort(d.due_date)} • ${Helpers.formatTime(d.due_time)}</span>
           </p>
         </div>
         <div class="border-t border-surface-container-high pt-2.5 flex items-center justify-between gap-2">
@@ -240,56 +280,132 @@ const DeadlinesComponent = {
     `;
   },
 
+  setCategory(cat, customName = '') {
+    this.selectedCategory = cat || 'assignment';
+    document.querySelectorAll('.dl-cat-btn').forEach(b => {
+      const isSelected = b.dataset.cat === this.selectedCategory;
+      b.classList.toggle('bg-secondary-container', isSelected);
+      b.classList.toggle('text-on-secondary-container', isSelected);
+      b.classList.toggle('bg-surface-container-lowest', !isSelected);
+      b.classList.toggle('text-on-surface', !isSelected);
+    });
+
+    const customWrap = document.getElementById('dl-custom-name-wrap');
+    const customInput = document.getElementById('dl-custom-name');
+    if (this.selectedCategory === 'custom') {
+      customWrap?.classList.remove('hidden');
+      if (customInput) customInput.value = customName || '';
+    } else {
+      customWrap?.classList.add('hidden');
+      if (customInput) customInput.value = '';
+    }
+  },
+
   attachEvents() {
     const modal = document.getElementById('add-task-modal');
-    const open = () => {
-      document.getElementById('dl-date').value = new Date().toISOString().split('T')[0];
+    const form = document.getElementById('dl-create-form');
+    const modalTitle = document.getElementById('dl-modal-title');
+    const submitLabel = document.getElementById('dl-submit-label');
+
+    const open = (existing = null) => {
+      form?.reset();
+      if (existing && existing.id) {
+        this.editingDeadlineId = existing.id;
+        this.editingOriginalCategory = existing.category || 'assignment';
+        if (modalTitle) modalTitle.textContent = 'Edit Deliverable';
+        if (submitLabel) submitLabel.textContent = 'Save Changes';
+        document.getElementById('dl-title').value = existing.title || '';
+        document.getElementById('dl-subject').value = existing.subject_id || '';
+        document.getElementById('dl-date').value = existing.due_date || new Date().toISOString().split('T')[0];
+        document.getElementById('dl-time').value = existing.due_time || '23:59';
+        document.getElementById('dl-platform').value = existing.platform || 'Moodle Portal';
+        this.setCategory(this.editingOriginalCategory, this.editingOriginalCategory === 'custom' ? (existing.description || '') : '');
+      } else {
+        this.editingDeadlineId = null;
+        this.editingOriginalCategory = null;
+        if (modalTitle) modalTitle.textContent = 'New Deliverable';
+        if (submitLabel) submitLabel.textContent = 'Schedule Deliverable';
+        document.getElementById('dl-date').value = new Date().toISOString().split('T')[0];
+        this.setCategory('assignment', '');
+      }
       modal?.classList.remove('hidden');
       modal?.classList.add('flex');
     };
+    this.openModal = open;
+
     const close = () => {
+      this.editingDeadlineId = null;
+      this.editingOriginalCategory = null;
       modal?.classList.add('hidden');
       modal?.classList.remove('flex');
     };
 
-    document.getElementById('add-deadline-btn')?.addEventListener('click', open);
+    document.getElementById('add-deadline-btn')?.addEventListener('click', () => open(null));
     document.getElementById('dl-discard-btn')?.addEventListener('click', close);
     document.getElementById('dl-modal-backdrop')?.addEventListener('click', close);
 
     document.querySelectorAll('.dl-cat-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.selectedCategory = btn.dataset.cat;
-        document.querySelectorAll('.dl-cat-btn').forEach(b => {
-          b.classList.remove('bg-secondary-container', 'text-on-secondary-container');
-          b.classList.add('bg-surface-container-lowest', 'text-on-surface');
-        });
-        btn.classList.remove('bg-surface-container-lowest', 'text-on-surface');
-        btn.classList.add('bg-secondary-container', 'text-on-secondary-container');
+        const currentCustom = document.getElementById('dl-custom-name')?.value || '';
+        this.setCategory(btn.dataset.cat, btn.dataset.cat === 'custom' ? currentCustom : '');
+        if (btn.dataset.cat === 'custom') {
+          document.getElementById('dl-custom-name')?.focus();
+        }
       });
     });
 
-    document.getElementById('dl-create-form')?.addEventListener('submit', async (e) => {
+    form?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (this.isSubmitting) return;
+
+      const title = document.getElementById('dl-title').value.trim();
+      if (!title) {
+        Helpers.showToast('Please enter a deliverable name', 'error');
+        return;
+      }
+
+      const customName = document.getElementById('dl-custom-name')?.value.trim() || '';
+      if (this.selectedCategory === 'custom' && !customName) {
+        Helpers.showToast('Please enter a custom task name', 'error');
+        document.getElementById('dl-custom-name')?.focus();
+        return;
+      }
+
       const btn = document.getElementById('dl-submit-btn');
-      btn.disabled = true;
+      this.isSubmitting = true;
+      if (btn) btn.disabled = true;
+
+      const payload = {
+        title,
+        subject_id: document.getElementById('dl-subject').value || null,
+        category: this.selectedCategory,
+        due_date: document.getElementById('dl-date').value,
+        due_time: document.getElementById('dl-time').value || '23:59',
+        platform: document.getElementById('dl-platform').value
+      };
+      if (this.selectedCategory === 'custom') {
+        payload.description = customName;
+      } else if (!this.editingDeadlineId || this.editingOriginalCategory === 'custom') {
+        payload.description = null;
+      }
+
       try {
-        await API.post('/deadlines', {
-          title: document.getElementById('dl-title').value.trim(),
-          subject_id: document.getElementById('dl-subject').value || null,
-          category: this.selectedCategory,
-          due_date: document.getElementById('dl-date').value,
-          due_time: document.getElementById('dl-time').value || '23:59',
-          platform: document.getElementById('dl-platform').value,
-          grade_weight: parseFloat(document.getElementById('dl-weight').value) || 0
-        });
-        Helpers.showToast('Deadline scheduled!');
+        if (this.editingDeadlineId) {
+          await API.put(`/deadlines/${this.editingDeadlineId}`, payload);
+          Helpers.showToast('Deadline updated!');
+        } else {
+          await API.post('/deadlines', payload);
+          Helpers.showToast('Deadline scheduled!');
+        }
         e.target.reset();
+        this.setCategory('assignment', '');
         close();
         await this.loadData();
       } catch (err) {
-        Helpers.showToast(err.message, 'error');
+        Helpers.showToast(err.message || 'Failed to save deadline', 'error');
       } finally {
-        btn.disabled = false;
+        this.isSubmitting = false;
+        if (btn) btn.disabled = false;
       }
     });
   }
